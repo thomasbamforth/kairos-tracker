@@ -2175,7 +2175,11 @@
         catch { return []; }
       });
       const [meetings, setMeetings] = useState(() => {
-        try { const s = localStorage.getItem('kairos_v1_meetings'); return s ? JSON.parse(s) : DEFAULT_MEETINGS; }
+        try {
+          const s = localStorage.getItem('kairos_v1_meetings');
+          const parsed = s ? JSON.parse(s) : null;
+          return (parsed && parsed.length > 0) ? parsed : DEFAULT_MEETINGS;
+        }
         catch { return DEFAULT_MEETINGS; }
       });
       const [settings, setSettings] = useState(() => {
