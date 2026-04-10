@@ -261,7 +261,7 @@
         team.gates[m.id] = {};
         m.gates.forEach(g => { team.gates[m.id][g.id] = { completed: false, date: null }; });
         team.assignments[m.id] = {};
-        m.assignments.forEach(a => { team.assignments[m.id][a.id] = { status: 'not_started', link: '', notes: '', submittedDate: null }; });
+        m.assignments.forEach(a => { team.assignments[m.id][a.id] = { status: 'not_started', link: '', notes: '', submittedDate: null, pmComment: '', pmReviewDate: null }; });
         team.monthNotes[m.id] = '';
         if (m.gateDecision) team.gateDecisions[m.id] = { decision: null, date: null, notes: '' };
       });
@@ -545,23 +545,27 @@
     // ============================================================
 
     const STATUSES = {
-      not_started: { label: 'Not Started', color: '#9CA3AF', bg: '#F9FAFB' },
-      in_progress:  { label: 'In Progress', color: '#D97706', bg: '#FFFBEB' },
-      submitted:    { label: 'Submitted',   color: '#2563EB', bg: '#EFF6FF' },
-      approved:     { label: 'Approved v',  color: '#059669', bg: '#ECFDF5' },
+      not_started:       { label: 'Not Started',       color: '#9CA3AF', bg: '#F9FAFB' },
+      in_progress:       { label: 'In Progress',        color: '#D97706', bg: '#FFFBEB' },
+      submitted:         { label: 'Submitted',          color: '#2563EB', bg: '#EFF6FF' },
+      changes_requested: { label: 'Changes Requested',  color: '#DC2626', bg: '#FEF2F2' },
+      approved:          { label: 'Approved v',         color: '#059669', bg: '#ECFDF5' },
     };
 
     function AssignmentTracker({ assignments, assignmentData, onUpdate }) {
+      const [pmComments, setPmComments] = useState({});
       const approved = assignments.filter(a => assignmentData[a.id]?.status === 'approved').length;
+      const today = new Date().toISOString().split('T')[0];
+
       return (
         <div>
           <div className="flex justify-between items-center mb-3">
-            <div className="font-semibold text-gray-800">Assignments & Deliverables</div>
+            <div className="font-semibold text-gray-800">Assignments and Deliverables</div>
             <div className="text-sm text-gray-500">{approved}/{assignments.length} approved</div>
           </div>
           <div className="space-y-3">
             {assignments.map(a => {
-              const ad = assignmentData[a.id] || { status: 'not_started', link: '', notes: '', submittedDate: null };
+              const ad = assignmentData[a.id] || { status: 'not_started', link: '', notes: '', submittedDate: null, pmComment: '', pmReviewDate: null };
               const sc = STATUSES[ad.status] || STATUSES.not_started;
               return (
                 <div key={a.id} style={{ background: sc.bg, border: `1px solid ${sc.color}30`, borderRadius: 10 }} className="p-4">
@@ -571,7 +575,7 @@
                       <div className="text-xs text-gray-500 mt-0.5 leading-relaxed">{a.desc}</div>
                     </div>
                     <select value={ad.status}
-                      onChange={e => onUpdate(a.id, { ...ad, status: e.target.value, submittedDate: e.target.value === 'submitted' && !ad.submittedDate ? new Date().toISOString().split('T')[0] : ad.submittedDate })}
+                      onChange={e => onUpdate(a.id, { ...ad, status: e.target.value, submittedDate: e.target.value === 'submitted' && !ad.submittedDate ? today : ad.submittedDate })}
                       style={{ color: sc.color, background: sc.bg, border: `1px solid ${sc.color}50`, fontSize: 12, fontWeight: 500 }}
                       className="rounded-md px-2 py-1 flex-shrink-0">
                       {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -581,6 +585,25 @@
                     placeholder="Paste link to document, Figma, Google Drive, etc..."
                     className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-200" />
                   {ad.submittedDate && <div className="text-xs text-gray-400 mt-1">Submitted: {ad.submittedDate}</div>}
+                  {ad.status === 'submitted' && (
+                    <div className="mt-3 space-y-2 pt-2 border-t border-gray-100">
+                      <textarea value={pmComments[a.id] || ''} onChange={e => setPmComments(c => ({ ...c, [a.id]: e.target.value }))}
+                        placeholder="Add feedback (required when requesting changes)..."
+                        rows={2}
+                        className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
+                      <div className="flex gap-2">
+                        <button onClick={() => onUpdate(a.id, { ...ad, status: 'approved', pmReviewDate: today })}
+                          style={{ background: '#059669' }}
+                          className="text-white text-xs px-3 py-1.5 rounded-lg font-semibold hover:opacity-90">Approve</button>
+                        <button onClick={() => { onUpdate(a.id, { ...ad, status: 'changes_requested', pmComment: pmComments[a.id] || '', pmReviewDate: today }); setPmComments(c => ({ ...c, [a.id]: '' })); }}
+                          style={{ background: '#DC2626' }}
+                          className="text-white text-xs px-3 py-1.5 rounded-lg font-semibold hover:opacity-90">Request Changes</button>
+                      </div>
+                    </div>
+                  )}
+                  {(ad.status === 'changes_requested' || ad.status === 'approved') && ad.pmComment && (
+                    <div className="mt-2 text-xs text-gray-400 italic">PM note: {ad.pmComment} {ad.pmReviewDate ? ('(' + ad.pmReviewDate + ')') : ''}</div>
+                  )}
                 </div>
               );
             })}
@@ -1119,62 +1142,1056 @@
     }
 
     // ============================================================
+    // LANDING PAGE
+    // ============================================================
+
+    function LandingPage({ teams, onSelectTeam, onEnterPM }) {
+      const [teamId, setTeamId] = useState('');
+      const [err, setErr] = useState('');
+
+      const enterTeam = () => {
+        if (!teamId) { setErr('Please select your team first.'); return; }
+        setErr('');
+        onSelectTeam(teamId);
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: '#EDF4FB' }}>
+          <div className="mb-10 text-center">
+            <div style={{ background: '#13294B' }} className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+              <span style={{ color: '#4B9CD3' }} className="text-3xl font-black">K</span>
+            </div>
+            <div className="text-3xl font-black text-gray-900">Kairos Program Portal</div>
+            <div className="text-gray-500 mt-1">UNC Commercialization Accelerator</div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
+            {/* Team Portal card */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <div style={{ background: '#EFF6FF' }} className="w-12 h-12 rounded-xl flex items-center justify-center mb-4">
+                <span style={{ color: '#4B9CD3' }} className="text-2xl">&#9632;</span>
+              </div>
+              <div className="font-bold text-gray-900 text-lg mb-1">Team Portal</div>
+              <div className="text-sm text-gray-500 mb-5">Upload assignments, track progress, log discovery calls, and access training resources.</div>
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Select Your Team</label>
+                <select value={teamId} onChange={e => { setTeamId(e.target.value); setErr(''); }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                  <option value="">Choose a team...</option>
+                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}{t.venture ? ' - ' + t.venture : ''}</option>)}
+                </select>
+                {err && <div className="text-red-500 text-xs mt-1">{err}</div>}
+                {teams.length === 0 && <div className="text-xs text-gray-400 mt-1">No teams registered yet. Ask your Program Manager to add your team.</div>}
+              </div>
+              <button onClick={enterTeam} style={{ background: '#4B9CD3' }}
+                className="w-full text-white py-2.5 rounded-xl font-semibold text-sm hover:opacity-90">
+                Enter Team Portal
+              </button>
+            </div>
+
+            {/* PM Portal card */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <div style={{ background: '#F5F3FF' }} className="w-12 h-12 rounded-xl flex items-center justify-center mb-4">
+                <span style={{ color: '#6D28D9' }} className="text-2xl">&#9670;</span>
+              </div>
+              <div className="font-bold text-gray-900 text-lg mb-1">Program Manager</div>
+              <div className="text-sm text-gray-500 mb-5">Review submissions, manage teams, track cohort progress, and configure the program schedule.</div>
+              <div className="mb-5 p-3 bg-gray-50 rounded-lg text-xs text-gray-500 border border-gray-100">
+                PIN-protected access. Default PIN: 1234
+              </div>
+              <button onClick={onEnterPM} style={{ background: '#13294B' }}
+                className="w-full text-white py-2.5 rounded-xl font-semibold text-sm hover:opacity-90">
+                Program Manager Access
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // TEAM PORTAL
+    // ============================================================
+
+    function TeamAssignmentList({ assignments, assignmentData, onUpdate }) {
+      const today = new Date().toISOString().split('T')[0];
+      const TEAM_STATUSES = ['not_started', 'in_progress', 'submitted'];
+      const approved = assignments.filter(a => assignmentData[a.id]?.status === 'approved').length;
+
+      return (
+        <div>
+          <div className="flex justify-between items-center mb-3">
+            <div className="font-semibold text-gray-800">Assignments</div>
+            <div className="text-sm text-gray-500">{approved}/{assignments.length} approved</div>
+          </div>
+          <div className="space-y-3">
+            {assignments.map(a => {
+              const ad = assignmentData[a.id] || { status: 'not_started', link: '', notes: '', submittedDate: null, pmComment: '', pmReviewDate: null };
+              const sc = STATUSES[ad.status] || STATUSES.not_started;
+              const isApproved = ad.status === 'approved';
+              const needsChanges = ad.status === 'changes_requested';
+              return (
+                <div key={a.id} style={{ background: sc.bg, border: `1px solid ${sc.color}30`, borderRadius: 10 }} className="p-4">
+                  <div className="flex items-start gap-3 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 text-sm">{a.title}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{a.desc}</div>
+                    </div>
+                    <span style={{ color: sc.color, background: sc.bg, border: `1px solid ${sc.color}50`, fontSize: 11, fontWeight: 600 }}
+                      className="rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0">{sc.label}</span>
+                  </div>
+                  {!isApproved && (
+                    <>
+                      <input type="text" value={ad.link || ''} onChange={e => onUpdate(a.id, { ...ad, link: e.target.value })}
+                        placeholder="Paste link to Google Drive, Figma, etc..."
+                        className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-200 mb-2" />
+                      {!needsChanges && (
+                        <select value={ad.status}
+                          onChange={e => { const s = e.target.value; onUpdate(a.id, { ...ad, status: s, submittedDate: s === 'submitted' && !ad.submittedDate ? today : ad.submittedDate }); }}
+                          style={{ color: sc.color, background: 'white', border: `1px solid ${sc.color}50`, fontSize: 12, fontWeight: 500 }}
+                          className="rounded-md px-2 py-1">
+                          {TEAM_STATUSES.map(k => <option key={k} value={k}>{STATUSES[k].label}</option>)}
+                        </select>
+                      )}
+                    </>
+                  )}
+                  {isApproved && ad.link && (
+                    <div className="text-xs text-gray-500 truncate">{ad.link}</div>
+                  )}
+                  {ad.submittedDate && !isApproved && <div className="text-xs text-gray-400 mt-1">Submitted: {ad.submittedDate}</div>}
+                  {needsChanges && (
+                    <div className="mt-2 bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div className="text-xs font-semibold text-red-700 mb-1">Feedback from Program Manager:</div>
+                      {ad.pmComment && <div className="text-xs text-red-600 mb-2">{ad.pmComment}</div>}
+                      <input type="text" value={ad.link || ''} onChange={e => onUpdate(a.id, { ...ad, link: e.target.value })}
+                        placeholder="Update your submission link..."
+                        className="w-full text-xs border border-red-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-red-300 mb-2" />
+                      <button onClick={() => onUpdate(a.id, { ...ad, status: 'submitted', submittedDate: today })}
+                        style={{ background: '#2563EB' }}
+                        className="text-white text-xs px-3 py-1.5 rounded-lg font-semibold hover:opacity-90">
+                        Resubmit
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function TeamHomeTab({ team, meetings, onTabChange }) {
+      const phase = currentPhase(team);
+      const monthData = MONTHS.find(m => m.id === team.currentMonth);
+      const { done, total } = getGateCompletion(team, team.currentMonth);
+      const totalCalls = team.calls.length;
+      const submittedCount = (() => {
+        let n = 0;
+        MONTHS.forEach(m => {
+          if (!monthData || m.id <= team.currentMonth) {
+            (monthData ? [m] : MONTHS.filter(x => x.id <= team.currentMonth)).forEach(() => {});
+          }
+        });
+        MONTHS.filter(m => m.id <= team.currentMonth).forEach(m => {
+          m.assignments.forEach(a => {
+            const st = team.assignments[m.id]?.[a.id]?.status;
+            if (st === 'submitted' || st === 'changes_requested') n++;
+          });
+        });
+        return n;
+      })();
+
+      const now = new Date();
+      const upcoming = [...meetings]
+        .filter(mtg => {
+          if (!mtg.date) return false;
+          const d = new Date(mtg.date + 'T' + (mtg.time || '00:00'));
+          return d >= now && (mtg.type === 'group' || (mtg.teamIds || []).includes(team.id));
+        })
+        .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+      const nextMeeting = upcoming[0];
+
+      return (
+        <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
+          {/* Welcome card */}
+          <div style={{ background: '#13294B' }} className="rounded-2xl p-6 text-white">
+            <div className="text-white/60 text-sm mb-1">Welcome back,</div>
+            <div className="text-2xl font-black mb-0.5">{team.name}</div>
+            {team.venture && <div className="text-white/70 mb-3">{team.venture}</div>}
+            <div className="flex flex-wrap gap-3">
+              <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
+                <div className="text-xl font-bold">{monthData ? monthData.label : 'M0'}</div>
+                <div className="text-xs text-white/60">{monthData ? monthData.name : 'Onboarding'}</div>
+              </div>
+              <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
+                <div className="text-xl font-bold">{done}/{total}</div>
+                <div className="text-xs text-white/60">Gates done</div>
+              </div>
+              <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
+                <div className="text-xl font-bold">{totalCalls}</div>
+                <div className="text-xs text-white/60">Discovery calls</div>
+              </div>
+              {submittedCount > 0 && (
+                <div className="bg-yellow-400/20 border border-yellow-300/30 rounded-xl px-4 py-2 text-center">
+                  <div className="text-xl font-bold text-yellow-200">{submittedCount}</div>
+                  <div className="text-xs text-yellow-200/70">Awaiting review</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Next meeting */}
+          {nextMeeting ? (
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Next Meeting</div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-gray-900">{nextMeeting.title}</div>
+                  <div className="text-sm text-gray-500">{nextMeeting.date}{nextMeeting.time ? ' at ' + nextMeeting.time : ''}</div>
+                  {nextMeeting.description && <div className="text-xs text-gray-400 mt-0.5">{nextMeeting.description}</div>}
+                </div>
+                {nextMeeting.zoomLink && (
+                  <a href={nextMeeting.zoomLink} target="_blank" rel="noreferrer"
+                    style={{ background: '#2563EB' }}
+                    className="text-white text-xs px-3 py-2 rounded-lg font-semibold hover:opacity-90 flex-shrink-0 ml-3">
+                    Join
+                  </a>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-sm text-gray-400">
+              No upcoming meetings scheduled.
+            </div>
+          )}
+
+          {/* Quick actions */}
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => onTabChange('work')} style={{ background: '#4B9CD3' }}
+              className="text-white rounded-xl p-4 text-left hover:opacity-90">
+              <div className="font-bold mb-0.5">Work</div>
+              <div className="text-xs text-white/70">Gates and assignments</div>
+            </button>
+            <button onClick={() => onTabChange('calls')} style={{ background: '#059669' }}
+              className="text-white rounded-xl p-4 text-left hover:opacity-90">
+              <div className="font-bold mb-0.5">Log a Call</div>
+              <div className="text-xs text-white/70">Discovery call log</div>
+            </button>
+            <button onClick={() => onTabChange('schedule')} style={{ background: '#6D28D9' }}
+              className="text-white rounded-xl p-4 text-left hover:opacity-90">
+              <div className="font-bold mb-0.5">Schedule</div>
+              <div className="text-xs text-white/70">Upcoming meetings</div>
+            </button>
+            <button onClick={() => onTabChange('resources')} style={{ background: '#D97706' }}
+              className="text-white rounded-xl p-4 text-left hover:opacity-90">
+              <div className="font-bold mb-0.5">Resources</div>
+              <div className="text-xs text-white/70">Canvas, CRM, training</div>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function TeamWorkTab({ team, onUpdate }) {
+      const [selMonth, setSelMonth] = useState(team.currentMonth);
+      const monthData = MONTHS.find(m => m.id === selMonth);
+      const phase = currentPhase(team);
+
+      const toggleGate = (gId) => {
+        const cur = team.gates[selMonth]?.[gId] || {};
+        const completed = !cur.completed;
+        onUpdate({ ...team, gates: { ...team.gates, [selMonth]: { ...team.gates[selMonth], [gId]: { completed, date: completed ? new Date().toISOString().split('T')[0] : null } } } });
+      };
+
+      const updateAssignment = (aId, data) => {
+        onUpdate({ ...team, assignments: { ...team.assignments, [selMonth]: { ...team.assignments[selMonth], [aId]: data } } });
+      };
+
+      return (
+        <div className="max-w-3xl mx-auto px-4 py-6">
+          {/* Month tabs */}
+          <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            {MONTHS.map(m => {
+              const locked = m.id > team.currentMonth;
+              const { done, total } = getGateCompletion(team, m.id);
+              const allDone = done === total && total > 0;
+              const isSel = m.id === selMonth;
+              return (
+                <button key={m.id} onClick={() => { if (!locked) setSelMonth(m.id); }}
+                  style={{
+                    background: isSel ? pc(m.phase) : allDone && !locked ? '#ECFDF5' : '#F9FAFB',
+                    color: isSel ? 'white' : allDone && !locked ? '#059669' : locked ? '#D1D5DB' : '#6B7280',
+                    border: isSel ? `2px solid ${pc(m.phase)}` : allDone && !locked ? '2px solid #6EE7B7' : '2px solid #E5E7EB',
+                    cursor: locked ? 'not-allowed' : 'pointer',
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0">
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {monthData && (
+            <>
+              <div className="bg-white rounded-xl p-4 mb-4 shadow-sm">
+                <div className="flex items-center gap-2 mb-1">
+                  <span style={{ background: pc(monthData.phase), color: 'white' }} className="text-xs font-bold px-2 py-0.5 rounded">{monthData.label}</span>
+                  <span className="font-bold text-gray-900">{monthData.name}</span>
+                </div>
+                <p className="text-sm text-gray-600">{monthData.objective}</p>
+              </div>
+
+              <div className="bg-white rounded-xl p-5 shadow-sm mb-4">
+                <GateChecklist
+                  gates={monthData.gates}
+                  gateData={team.gates[selMonth] || {}}
+                  onToggle={toggleGate}
+                />
+              </div>
+
+              <div className="bg-white rounded-xl p-5 shadow-sm">
+                <TeamAssignmentList
+                  assignments={monthData.assignments}
+                  assignmentData={team.assignments[selMonth] || {}}
+                  onUpdate={updateAssignment}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    function TeamScheduleTab({ meetings, team }) {
+      const now = new Date();
+      const relevant = [...meetings]
+        .filter(mtg => mtg.type === 'group' || (mtg.teamIds || []).includes(team.id))
+        .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+      const upcoming = relevant.filter(m => new Date(m.date + 'T' + (m.time || '23:59')) >= now);
+      const past = relevant.filter(m => new Date(m.date + 'T' + (m.time || '23:59')) < now);
+
+      const MtgCard = ({ mtg, dim }) => (
+        <div style={{ opacity: dim ? 0.5 : 1 }} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-start justify-between">
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-gray-900">{mtg.title}</div>
+              <div className="text-sm text-gray-500">{mtg.date}{mtg.time ? ' at ' + mtg.time : ''}</div>
+              {mtg.description && <div className="text-xs text-gray-400 mt-1">{mtg.description}</div>}
+              <div className="text-xs mt-1">
+                <span style={{ background: mtg.type === 'group' ? '#EFF6FF' : '#F5F3FF', color: mtg.type === 'group' ? '#1D4ED8' : '#6D28D9' }}
+                  className="px-2 py-0.5 rounded-full font-medium">{mtg.type === 'group' ? 'Group Session' : 'Individual'}</span>
+              </div>
+            </div>
+            {mtg.zoomLink && !dim && (
+              <a href={mtg.zoomLink} target="_blank" rel="noreferrer"
+                style={{ background: '#2563EB' }}
+                className="text-white text-xs px-3 py-1.5 rounded-lg font-semibold hover:opacity-90 ml-3 flex-shrink-0">
+                Join
+              </a>
+            )}
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="max-w-3xl mx-auto px-4 py-6">
+          <div className="font-bold text-gray-900 text-lg mb-4">Meeting Schedule</div>
+          {upcoming.length === 0 && past.length === 0 && (
+            <div className="text-center py-16 text-gray-400">No meetings scheduled yet.</div>
+          )}
+          {upcoming.length > 0 && (
+            <>
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Upcoming</div>
+              <div className="space-y-3 mb-6">
+                {upcoming.map(m => <MtgCard key={m.id} mtg={m} dim={false} />)}
+              </div>
+            </>
+          )}
+          {past.length > 0 && (
+            <>
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Past</div>
+              <div className="space-y-3">
+                {[...past].reverse().map(m => <MtgCard key={m.id} mtg={m} dim={true} />)}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    function TeamResourcesTab({ settings, team }) {
+      const monthData = MONTHS.find(m => m.id === team.currentMonth);
+
+      return (
+        <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
+          <div className="font-bold text-gray-900 text-lg">Resources</div>
+
+          {/* Links */}
+          <div className="grid grid-cols-1 gap-3">
+            {settings.canvasUrl ? (
+              <a href={settings.canvasUrl} target="_blank" rel="noreferrer"
+                style={{ background: '#13294B' }}
+                className="text-white rounded-xl p-4 flex items-center gap-4 hover:opacity-90">
+                <div style={{ background: '#4B9CD3' }} className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-white flex-shrink-0">C</div>
+                <div>
+                  <div className="font-bold">Canvas - Training Videos</div>
+                  <div className="text-xs text-white/60">Quizzes, modules, and course materials</div>
+                </div>
+              </a>
+            ) : (
+              <div className="bg-gray-100 rounded-xl p-4 flex items-center gap-4 text-gray-400 border-2 border-dashed border-gray-200">
+                <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center font-black flex-shrink-0">C</div>
+                <div>
+                  <div className="font-bold">Canvas - Training Videos</div>
+                  <div className="text-xs">Link not configured yet - ask your Program Manager</div>
+                </div>
+              </div>
+            )}
+            {settings.crmUrl ? (
+              <a href={settings.crmUrl} target="_blank" rel="noreferrer"
+                style={{ background: '#059669' }}
+                className="text-white rounded-xl p-4 flex items-center gap-4 hover:opacity-90">
+                <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center font-black text-white flex-shrink-0">CRM</div>
+                <div>
+                  <div className="font-bold">CRM - Discovery Call Tracker</div>
+                  <div className="text-xs text-white/60">Log and manage your customer contacts</div>
+                </div>
+              </a>
+            ) : (
+              <div className="bg-gray-100 rounded-xl p-4 flex items-center gap-4 text-gray-400 border-2 border-dashed border-gray-200">
+                <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center font-black flex-shrink-0 text-xs">CRM</div>
+                <div>
+                  <div className="font-bold">CRM - Discovery Call Tracker</div>
+                  <div className="text-xs">Link not configured yet - ask your Program Manager</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Current month focus */}
+          {monthData && (
+            <div className="bg-white rounded-xl p-5 shadow-sm">
+              <div className="font-semibold text-gray-900 mb-3">Current Month: {monthData.label} - {monthData.name}</div>
+              <p className="text-sm text-gray-600 mb-4">{monthData.objective}</p>
+              <div className="font-semibold text-gray-700 text-sm mb-2">Key Activities This Month</div>
+              <div className="space-y-1">
+                {monthData.keyActivities.map((act, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
+                    <span style={{ color: '#4B9CD3' }} className="font-bold flex-shrink-0">-</span>
+                    <span>{act}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Program overview */}
+          <div className="bg-white rounded-xl p-5 shadow-sm">
+            <div className="font-semibold text-gray-900 mb-3">Program Roadmap</div>
+            <div className="space-y-2">
+              {MONTHS.map(m => {
+                const locked = m.id > team.currentMonth;
+                const current = m.id === team.currentMonth;
+                return (
+                  <div key={m.id} style={{ opacity: locked ? 0.4 : 1 }}
+                    className="flex items-center gap-3 p-2.5 rounded-lg bg-gray-50">
+                    <span style={{ background: current ? pc(m.phase) : '#E5E7EB', color: current ? 'white' : '#9CA3AF' }}
+                      className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0">{m.label}</span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-800">{m.name}</div>
+                      {current && <div className="text-xs text-blue-500 font-medium">Current month</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function TeamPortal({ team, meetings, settings, onUpdate, onBack }) {
+      const [tab, setTab] = useState('home');
+      const tabs = [
+        { id: 'home', label: 'Home' },
+        { id: 'work', label: 'Work' },
+        { id: 'calls', label: 'Calls' },
+        { id: 'schedule', label: 'Schedule' },
+        { id: 'resources', label: 'Resources' },
+      ];
+
+      return (
+        <div className="min-h-screen" style={{ background: '#EDF4FB' }}>
+          <div style={{ background: '#13294B' }} className="shadow-md sticky top-0 z-40">
+            <div className="max-w-5xl mx-auto px-4">
+              <div className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-3">
+                  <div style={{ background: '#4B9CD3' }} className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-base">K</div>
+                  <div>
+                    <div className="text-white font-bold text-base leading-tight">{team.name}</div>
+                    <div className="text-white/40 text-xs leading-tight">{team.venture || 'Team Portal'}</div>
+                  </div>
+                </div>
+                <button onClick={onBack} className="text-white/60 hover:text-white text-sm">Exit Portal</button>
+              </div>
+              <div className="flex gap-1 pb-0">
+                {tabs.map(t => (
+                  <button key={t.id} onClick={() => setTab(t.id)}
+                    style={{
+                      color: tab === t.id ? '#4B9CD3' : 'rgba(255,255,255,0.5)',
+                      borderBottom: tab === t.id ? '2px solid #4B9CD3' : '2px solid transparent',
+                    }}
+                    className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors">
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {tab === 'home' && <TeamHomeTab team={team} meetings={meetings} onTabChange={setTab} />}
+          {tab === 'work' && <TeamWorkTab team={team} onUpdate={onUpdate} />}
+          {tab === 'calls' && (
+            <div className="max-w-3xl mx-auto px-4 py-6">
+              <CallLog team={team}
+                onAddCall={call => onUpdate({ ...team, calls: [...team.calls, call] })}
+                onDeleteCall={id => onUpdate({ ...team, calls: team.calls.filter(c => c.id !== id) })}
+                selectedMonth={team.currentMonth} />
+            </div>
+          )}
+          {tab === 'schedule' && <TeamScheduleTab meetings={meetings} team={team} />}
+          {tab === 'resources' && <TeamResourcesTab settings={settings} team={team} />}
+        </div>
+      );
+    }
+
+    // ============================================================
+    // PM PORTAL
+    // ============================================================
+
+    function PMAuthModal({ settings, onAuth, onBack }) {
+      const [pin, setPin] = useState('');
+      const [err, setErr] = useState('');
+
+      const submit = (e) => {
+        e.preventDefault();
+        if (pin === (settings.pmPin || '1234')) { onAuth(); }
+        else { setErr('Incorrect PIN. Try again.'); setPin(''); }
+      };
+
+      return (
+        <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#EDF4FB' }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
+            <div className="text-center mb-6">
+              <div style={{ background: '#13294B' }} className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <span className="text-white text-2xl">&#9670;</span>
+              </div>
+              <div className="font-bold text-gray-900 text-xl">Program Manager</div>
+              <div className="text-sm text-gray-400 mt-1">Enter your PIN to continue</div>
+            </div>
+            <form onSubmit={submit}>
+              <input type="password" value={pin} onChange={e => { setPin(e.target.value); setErr(''); }}
+                placeholder="Enter PIN"
+                maxLength={8}
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-center text-xl tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-200 mb-3" />
+              {err && <div className="text-red-500 text-sm text-center mb-3">{err}</div>}
+              <button type="submit" style={{ background: '#13294B' }}
+                className="w-full text-white py-3 rounded-xl font-semibold hover:opacity-90 mb-3">
+                Unlock
+              </button>
+              <button type="button" onClick={onBack}
+                className="w-full text-gray-400 text-sm hover:text-gray-600">
+                Back to Portal Selection
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    function PMReviewQueue({ teams, onUpdateTeam }) {
+      const [comments, setComments] = useState({});
+      const today = new Date().toISOString().split('T')[0];
+      const [statusFilter, setStatusFilter] = useState('submitted');
+
+      const items = [];
+      teams.forEach(team => {
+        MONTHS.forEach(m => {
+          m.assignments.forEach(a => {
+            const ad = team.assignments[m.id]?.[a.id];
+            if (ad && (ad.status === 'submitted' || ad.status === 'changes_requested')) {
+              items.push({ team, month: m, assignment: a, data: ad });
+            }
+          });
+        });
+      });
+      items.sort((a, b) => {
+        if (!a.data.submittedDate) return 1;
+        if (!b.data.submittedDate) return -1;
+        return b.data.submittedDate.localeCompare(a.data.submittedDate);
+      });
+
+      const filtered = statusFilter === 'all' ? items : items.filter(i => i.data.status === statusFilter);
+
+      const ck = (t, mId, aId) => t.id + '_' + mId + '_' + aId;
+
+      const approve = ({ team, month, assignment, data }) => {
+        onUpdateTeam({ ...team, assignments: { ...team.assignments, [month.id]: { ...team.assignments[month.id], [assignment.id]: { ...data, status: 'approved', pmReviewDate: today } } } });
+      };
+
+      const requestChanges = ({ team, month, assignment, data }) => {
+        const k = ck(team, month.id, assignment.id);
+        onUpdateTeam({ ...team, assignments: { ...team.assignments, [month.id]: { ...team.assignments[month.id], [assignment.id]: { ...data, status: 'changes_requested', pmComment: comments[k] || '', pmReviewDate: today } } } });
+        setComments(c => { const nc = { ...c }; delete nc[k]; return nc; });
+      };
+
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <div className="font-bold text-gray-900 text-lg">Review Queue</div>
+              <div className="text-sm text-gray-500">{filtered.length} submission{filtered.length !== 1 ? 's' : ''}</div>
+            </div>
+            <div className="flex gap-2">
+              {['submitted', 'changes_requested', 'all'].map(s => (
+                <button key={s} onClick={() => setStatusFilter(s)}
+                  style={{ background: statusFilter === s ? '#13294B' : 'white', color: statusFilter === s ? 'white' : '#6B7280', border: '1px solid #E5E7EB' }}
+                  className="text-xs px-3 py-1.5 rounded-lg font-medium">
+                  {s === 'submitted' ? 'New' : s === 'changes_requested' ? 'In Revision' : 'All'}
+                  <span className="ml-1 opacity-70">({s === 'all' ? items.length : items.filter(i => i.data.status === s).length})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="text-center py-20 text-gray-400">
+              <div className="text-lg mb-2">No submissions</div>
+              <div className="text-sm">Assignment submissions will appear here for review.</div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filtered.map(item => {
+                const { team, month, assignment, data } = item;
+                const sc = STATUSES[data.status] || STATUSES.submitted;
+                const k = ck(team, month.id, assignment.id);
+                return (
+                  <div key={k} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                    <div style={{ background: sc.bg, borderBottom: `1px solid ${sc.color}20` }} className="px-4 py-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span style={{ background: pc(month.phase), color: 'white' }} className="text-xs font-bold px-2 py-0.5 rounded">{month.label}</span>
+                        <span className="font-semibold text-gray-900">{team.name}</span>
+                        {team.venture && <span className="text-gray-400 text-xs">- {team.venture}</span>}
+                      </div>
+                      <span style={{ color: sc.color, border: `1px solid ${sc.color}50` }} className="text-xs font-medium px-2 py-0.5 rounded-full">{sc.label}</span>
+                    </div>
+                    <div className="p-4">
+                      <div className="font-medium text-gray-900 mb-0.5">{assignment.title}</div>
+                      <div className="text-xs text-gray-400 mb-3">{assignment.desc}</div>
+                      {data.link && (
+                        <a href={data.link} target="_blank" rel="noreferrer"
+                          className="text-xs text-blue-600 hover:underline block mb-2 truncate">{data.link}</a>
+                      )}
+                      {data.submittedDate && <div className="text-xs text-gray-400 mb-3">Submitted: {data.submittedDate}</div>}
+                      {data.status === 'submitted' && (
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <textarea value={comments[k] || ''} onChange={e => setComments(c => ({ ...c, [k]: e.target.value }))}
+                            placeholder="Feedback for team (required when requesting changes)..."
+                            rows={2}
+                            className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
+                          <div className="flex gap-2">
+                            <button onClick={() => approve(item)} style={{ background: '#059669' }}
+                              className="text-white text-sm px-4 py-2 rounded-lg font-semibold hover:opacity-90">Approve</button>
+                            <button onClick={() => requestChanges(item)} style={{ background: '#DC2626' }}
+                              className="text-white text-sm px-4 py-2 rounded-lg font-semibold hover:opacity-90">Request Changes</button>
+                          </div>
+                        </div>
+                      )}
+                      {data.status === 'changes_requested' && data.pmComment && (
+                        <div className="mt-2 bg-red-50 border border-red-100 rounded-lg p-3 text-xs">
+                          <div className="font-semibold text-red-700 mb-1">Changes requested:</div>
+                          <div className="text-red-600">{data.pmComment}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function AddMeetingModal({ meeting, teams, onSave, onClose }) {
+      const blank = { id: genId(), title: '', date: '', time: '', type: 'group', teamIds: [], zoomLink: '', description: '' };
+      const [form, setForm] = useState(meeting || blank);
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+      const toggleTeam = (id) => {
+        setForm(f => ({ ...f, teamIds: f.teamIds.includes(id) ? f.teamIds.filter(x => x !== id) : [...f.teamIds, id] }));
+      };
+
+      const submit = (e) => { e.preventDefault(); if (form.title.trim() && form.date) { onSave(form); onClose(); } };
+
+      return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div style={{ background: '#13294B' }} className="rounded-t-2xl px-6 py-4 flex justify-between items-center">
+              <div className="text-white font-bold text-lg">{meeting ? 'Edit Meeting' : 'Add Meeting'}</div>
+              <button onClick={onClose} className="text-white/60 hover:text-white text-2xl leading-none">x</button>
+            </div>
+            <form onSubmit={submit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Title *</label>
+                <input type="text" value={form.title} onChange={e => set('title', e.target.value)} required
+                  placeholder="e.g. M2 Cohort Review"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Date *</label>
+                  <input type="date" value={form.date} onChange={e => set('date', e.target.value)} required
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Time</label>
+                  <input type="time" value={form.time} onChange={e => set('time', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
+                <select value={form.type} onChange={e => set('type', e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                  <option value="group">Group Session (all teams)</option>
+                  <option value="individual">Individual (select teams)</option>
+                </select>
+              </div>
+              {form.type === 'individual' && teams.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-2">Teams</label>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                    {teams.map(t => (
+                      <label key={t.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded">
+                        <input type="checkbox" checked={form.teamIds.includes(t.id)} onChange={() => toggleTeam(t.id)} />
+                        {t.name}{t.venture ? ' - ' + t.venture : ''}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Zoom / Meeting Link</label>
+                <input type="text" value={form.zoomLink} onChange={e => set('zoomLink', e.target.value)}
+                  placeholder="https://zoom.us/j/..."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                <textarea value={form.description} onChange={e => set('description', e.target.value)}
+                  rows={2} placeholder="What will be covered in this session?"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={onClose}
+                  className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+                <button type="submit" style={{ background: '#13294B' }}
+                  className="flex-1 text-white py-2.5 rounded-lg text-sm font-medium hover:opacity-90">Save Meeting</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    function PMScheduleTab({ meetings, teams, onUpdateMeetings }) {
+      const [showAdd, setShowAdd] = useState(false);
+      const [editMtg, setEditMtg] = useState(null);
+      const now = new Date();
+      const sorted = [...meetings].sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+
+      const saveMeeting = (m) => {
+        const exists = meetings.find(x => x.id === m.id);
+        onUpdateMeetings(exists ? meetings.map(x => x.id === m.id ? m : x) : [...meetings, m]);
+      };
+
+      const deleteMeeting = (id) => {
+        if (window.confirm('Delete this meeting?')) onUpdateMeetings(meetings.filter(x => x.id !== id));
+      };
+
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <div className="font-bold text-gray-900 text-lg">Schedule</div>
+              <div className="text-sm text-gray-500">{meetings.length} meeting{meetings.length !== 1 ? 's' : ''} total</div>
+            </div>
+            <button onClick={() => setShowAdd(true)} style={{ background: '#13294B' }}
+              className="text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90">
+              + Add Meeting
+            </button>
+          </div>
+
+          {sorted.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">No meetings scheduled yet.</div>
+          ) : (
+            <div className="space-y-3">
+              {sorted.map(mtg => {
+                const isPast = new Date(mtg.date + 'T' + (mtg.time || '23:59')) < now;
+                return (
+                  <div key={mtg.id} style={{ opacity: isPast ? 0.6 : 1 }} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-gray-900">{mtg.title}</span>
+                          <span style={{ background: mtg.type === 'group' ? '#EFF6FF' : '#F5F3FF', color: mtg.type === 'group' ? '#1D4ED8' : '#6D28D9' }}
+                            className="text-xs px-2 py-0.5 rounded-full font-medium">{mtg.type === 'group' ? 'Group' : 'Individual'}</span>
+                          {isPast && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Past</span>}
+                        </div>
+                        <div className="text-sm text-gray-500">{mtg.date}{mtg.time ? ' at ' + mtg.time : ''}</div>
+                        {mtg.description && <div className="text-xs text-gray-400 mt-1">{mtg.description}</div>}
+                        {mtg.zoomLink && <div className="text-xs text-blue-500 truncate mt-1">{mtg.zoomLink}</div>}
+                        {mtg.type === 'individual' && mtg.teamIds.length > 0 && (
+                          <div className="text-xs text-gray-400 mt-1">
+                            Teams: {mtg.teamIds.map(id => teams.find(t => t.id === id)?.name || id).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button onClick={() => setEditMtg(mtg)}
+                          className="text-xs text-gray-400 hover:text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">Edit</button>
+                        <button onClick={() => deleteMeeting(mtg.id)}
+                          className="text-xs text-red-400 hover:text-red-600 border border-red-100 px-2.5 py-1.5 rounded-lg hover:bg-red-50">Delete</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {(showAdd || editMtg) && (
+            <AddMeetingModal
+              meeting={editMtg}
+              teams={teams}
+              onSave={saveMeeting}
+              onClose={() => { setShowAdd(false); setEditMtg(null); }}
+            />
+          )}
+        </div>
+      );
+    }
+
+    function PMSettingsTab({ settings, onUpdateSettings }) {
+      const [form, setForm] = useState({ ...settings });
+      const [saved, setSaved] = useState(false);
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+      const save = (e) => {
+        e.preventDefault();
+        onUpdateSettings(form);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      };
+
+      return (
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          <div className="font-bold text-gray-900 text-lg mb-5">Program Settings</div>
+          <form onSubmit={save} className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Program Name</label>
+              <input type="text" value={form.programName || ''} onChange={e => set('programName', e.target.value)}
+                placeholder="Kairos Program"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Canvas URL</label>
+              <input type="text" value={form.canvasUrl || ''} onChange={e => set('canvasUrl', e.target.value)}
+                placeholder="https://canvas.unc.edu/..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              <div className="text-xs text-gray-400 mt-1">Teams will see a link to this URL in their Resources tab.</div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">CRM URL</label>
+              <input type="text" value={form.crmUrl || ''} onChange={e => set('crmUrl', e.target.value)}
+                placeholder="https://..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              <div className="text-xs text-gray-400 mt-1">Teams will see a link to this URL in their Resources tab.</div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">PM Portal PIN</label>
+              <input type="text" value={form.pmPin || ''} onChange={e => set('pmPin', e.target.value)}
+                placeholder="1234"
+                maxLength={8}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              <div className="text-xs text-gray-400 mt-1">Required to access the PM portal. Default: 1234</div>
+            </div>
+            <button type="submit" style={{ background: saved ? '#059669' : '#13294B' }}
+              className="w-full text-white py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-colors">
+              {saved ? 'Saved!' : 'Save Settings'}
+            </button>
+          </form>
+        </div>
+      );
+    }
+
+    function PMPortal({ teams, meetings, settings, authenticated, onAuthenticate, onUpdateTeam, onAddTeam, onUpdateMeetings, onUpdateSettings, onBack }) {
+      const [tab, setTab] = useState('overview');
+      const [detailTeamId, setDetailTeamId] = useState(null);
+
+      if (!authenticated) {
+        return <PMAuthModal settings={settings} onAuth={onAuthenticate} onBack={onBack} />;
+      }
+
+      const tabs = [
+        { id: 'overview', label: 'Teams' },
+        { id: 'review', label: 'Review Queue' },
+        { id: 'schedule', label: 'Schedule' },
+        { id: 'settings', label: 'Settings' },
+      ];
+
+      const detailTeam = teams.find(t => t.id === detailTeamId);
+
+      const pendingCount = (() => {
+        let n = 0;
+        teams.forEach(team => {
+          MONTHS.forEach(m => {
+            m.assignments.forEach(a => {
+              if (team.assignments[m.id]?.[a.id]?.status === 'submitted') n++;
+            });
+          });
+        });
+        return n;
+      })();
+
+      return (
+        <div className="min-h-screen" style={{ background: '#EDF4FB' }}>
+          <div style={{ background: '#13294B' }} className="shadow-md sticky top-0 z-40">
+            <div className="max-w-7xl mx-auto px-4">
+              <div className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-3">
+                  {detailTeam && tab === 'overview' && (
+                    <button onClick={() => setDetailTeamId(null)} className="text-white/60 hover:text-white text-sm mr-1">
+                      &lt; Teams
+                    </button>
+                  )}
+                  <div style={{ background: '#4B9CD3' }} className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-base">K</div>
+                  <div>
+                    <div className="text-white font-bold text-base leading-tight">{settings.programName || 'Kairos'}</div>
+                    <div className="text-white/40 text-xs leading-tight">Program Manager</div>
+                  </div>
+                  {detailTeam && tab === 'overview' && (
+                    <div className="ml-2 flex items-center gap-2">
+                      <span className="text-white/30">-</span>
+                      <span className="text-white font-medium">{detailTeam.name}</span>
+                    </div>
+                  )}
+                </div>
+                <button onClick={onBack} className="text-white/60 hover:text-white text-sm">Exit</button>
+              </div>
+              <div className="flex gap-1 pb-0">
+                {tabs.map(t => (
+                  <button key={t.id} onClick={() => { setTab(t.id); if (t.id !== 'overview') setDetailTeamId(null); }}
+                    style={{
+                      color: tab === t.id ? '#4B9CD3' : 'rgba(255,255,255,0.5)',
+                      borderBottom: tab === t.id ? '2px solid #4B9CD3' : '2px solid transparent',
+                    }}
+                    className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors relative">
+                    {t.label}
+                    {t.id === 'review' && pendingCount > 0 && (
+                      <span style={{ background: '#DC2626' }} className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center font-bold">
+                        {pendingCount > 9 ? '9+' : pendingCount}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {tab === 'overview' && !detailTeam && (
+            <Dashboard teams={teams} onAddTeam={onAddTeam} onSelectTeam={id => setDetailTeamId(id)} />
+          )}
+          {tab === 'overview' && detailTeam && (
+            <TeamDetail team={detailTeam} onUpdate={onUpdateTeam} />
+          )}
+          {tab === 'review' && <PMReviewQueue teams={teams} onUpdateTeam={onUpdateTeam} />}
+          {tab === 'schedule' && <PMScheduleTab meetings={meetings} teams={teams} onUpdateMeetings={onUpdateMeetings} />}
+          {tab === 'settings' && <PMSettingsTab settings={settings} onUpdateSettings={onUpdateSettings} />}
+        </div>
+      );
+    }
+
+    // ============================================================
     // APP
     // ============================================================
+
+    const DEFAULT_SETTINGS = { programName: 'Kairos Program', canvasUrl: '', crmUrl: '', pmPin: '1234' };
 
     function App() {
       const [teams, setTeams] = useState(() => {
         try { const s = localStorage.getItem('kairos_v1_teams'); return s ? JSON.parse(s) : []; }
         catch { return []; }
       });
-      const [selectedId, setSelectedId] = useState(null);
-      const [view, setView] = useState('dashboard');
+      const [meetings, setMeetings] = useState(() => {
+        try { const s = localStorage.getItem('kairos_v1_meetings'); return s ? JSON.parse(s) : []; }
+        catch { return []; }
+      });
+      const [settings, setSettings] = useState(() => {
+        try { const s = localStorage.getItem('kairos_v1_settings'); return s ? { ...DEFAULT_SETTINGS, ...JSON.parse(s) } : DEFAULT_SETTINGS; }
+        catch { return DEFAULT_SETTINGS; }
+      });
 
-      useEffect(() => {
-        localStorage.setItem('kairos_v1_teams', JSON.stringify(teams));
-      }, [teams]);
+      const [portal, setPortal] = useState('landing');
+      const [teamPortalId, setTeamPortalId] = useState(null);
+      const [pmAuthenticated, setPmAuthenticated] = useState(false);
 
-      const selectedTeam = teams.find(t => t.id === selectedId);
+      useEffect(() => { localStorage.setItem('kairos_v1_teams', JSON.stringify(teams)); }, [teams]);
+      useEffect(() => { localStorage.setItem('kairos_v1_meetings', JSON.stringify(meetings)); }, [meetings]);
+      useEffect(() => { localStorage.setItem('kairos_v1_settings', JSON.stringify(settings)); }, [settings]);
 
-      const addTeam = (team) => setTeams(ts => [...ts, team]);
       const updateTeam = (updated) => setTeams(ts => ts.map(t => t.id === updated.id ? updated : t));
+      const addTeam = (team) => setTeams(ts => [...ts, team]);
 
-      const openTeam = (id) => { setSelectedId(id); setView('team'); };
-      const goBack = () => { setView('dashboard'); setSelectedId(null); };
+      const teamPortalTeam = teams.find(t => t.id === teamPortalId);
+
+      if (portal === 'team' && teamPortalTeam) {
+        return (
+          <TeamPortal
+            team={teamPortalTeam}
+            meetings={meetings}
+            settings={settings}
+            onUpdate={updateTeam}
+            onBack={() => { setPortal('landing'); setTeamPortalId(null); }}
+          />
+        );
+      }
+
+      if (portal === 'pm') {
+        return (
+          <PMPortal
+            teams={teams}
+            meetings={meetings}
+            settings={settings}
+            authenticated={pmAuthenticated}
+            onAuthenticate={() => setPmAuthenticated(true)}
+            onUpdateTeam={updateTeam}
+            onAddTeam={addTeam}
+            onUpdateMeetings={setMeetings}
+            onUpdateSettings={setSettings}
+            onBack={() => { setPortal('landing'); setPmAuthenticated(false); }}
+          />
+        );
+      }
 
       return (
-        <div>
-          {/* Header */}
-          <div style={{ background: '#13294B' }} className="shadow-md sticky top-0 z-40">
-            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {view !== 'dashboard' && (
-                  <button onClick={goBack} className="text-white/60 hover:text-white text-sm mr-1 flex items-center gap-1">
-                    <span>Back to Dashboard</span>
-                  </button>
-                )}
-                <div className="flex items-center gap-2.5">
-                  <div style={{ background: '#4B9CD3' }} className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-base">K</div>
-                  <div>
-                    <div className="text-white font-bold text-base leading-tight">Kairos</div>
-                    <div className="text-white/40 text-xs leading-tight">Program Tracker</div>
-                  </div>
-                </div>
-                {selectedTeam && (
-                  <div className="ml-2 flex items-center gap-2">
-                    <span className="text-white/30">></span>
-                    <span className="text-white font-medium">{selectedTeam.name}</span>
-                    {selectedTeam.venture && <span className="text-white/50 text-sm hidden sm:inline">- {selectedTeam.venture}</span>}
-                  </div>
-                )}
-              </div>
-              <div className="text-white/30 text-xs hidden sm:block">UNC Kairos</div>
-            </div>
-          </div>
-
-          {view === 'dashboard' && <Dashboard teams={teams} onAddTeam={addTeam} onSelectTeam={openTeam} />}
-          {view === 'team' && selectedTeam && <TeamDetail team={selectedTeam} onUpdate={updateTeam} />}
-        </div>
+        <LandingPage
+          teams={teams}
+          onSelectTeam={id => { setTeamPortalId(id); setPortal('team'); }}
+          onEnterPM={() => setPortal('pm')}
+        />
       );
     }
 
