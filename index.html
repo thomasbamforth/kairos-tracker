@@ -326,7 +326,7 @@
       );
     }
 
-    function TeamCard({ team, cohorts, onAssignCohort, onClick }) {
+    function TeamCard({ team, cohorts, onAssignCohort, onDelete, onClick }) {
       const phase = currentPhase(team);
       const calls = team.calls.length;
       const { done, total } = getGateCompletion(team, team.currentMonth);
@@ -375,19 +375,29 @@
             </div>
 
             {cohorts && cohorts.length > 0 && onAssignCohort && (
-              <select value={team.cohortId || ''}
-                onChange={e => { e.stopPropagation(); onAssignCohort(e.target.value || null); }}
-                onClick={e => e.stopPropagation()}
-                className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-gray-50 text-gray-600 mb-2 focus:outline-none focus:ring-1 focus:ring-blue-200">
-                <option value="">No cohort</option>
-                {cohorts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <div onClick={e => e.stopPropagation()} className="mb-2">
+                <label className="block text-xs text-gray-400 mb-1">Cohort</label>
+                <select value={team.cohortId || ''}
+                  onChange={e => onAssignCohort(e.target.value || null)}
+                  className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-gray-50 text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-200">
+                  <option value="">No cohort</option>
+                  {cohorts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
             )}
 
-            <button onClick={onClick} style={{ background: '#13294B', color: 'white' }}
-              className="w-full py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-              Open Team ->
-            </button>
+            <div className="flex gap-2">
+              <button onClick={onClick} style={{ background: '#13294B', color: 'white' }}
+                className="flex-1 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                Open Team ->
+              </button>
+              {onDelete && (
+                <button onClick={e => { e.stopPropagation(); onDelete(); }}
+                  className="text-red-400 hover:text-red-600 border border-red-100 hover:bg-red-50 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+                  Delete
+                </button>
+              )}
+            </div>
           </div>
         </div>
       );
@@ -534,7 +544,7 @@
       );
     }
 
-    function Dashboard({ teams, cohorts, onAddTeam, onSelectTeam, onUpdateTeam, onUpdateCohorts }) {
+    function Dashboard({ teams, cohorts, onAddTeam, onSelectTeam, onUpdateTeam, onDeleteTeam, onUpdateCohorts }) {
       const [showAdd, setShowAdd] = useState(false);
       const [showManageCohorts, setShowManageCohorts] = useState(false);
       const [search, setSearch] = useState('');
@@ -633,7 +643,10 @@
                             onAssignCohort={newCohortId => {
                               const cohortName = cohorts.find(c => c.id === newCohortId)?.name || '';
                               onUpdateTeam({ ...t, cohortId: newCohortId, cohort: cohortName });
-                            }} />
+                            }}
+                            onDelete={onDeleteTeam ? () => {
+                              if (window.confirm('Delete ' + t.name + '? This cannot be undone.')) onDeleteTeam(t.id);
+                            } : null} />
                         ))}
                       </div>
                     </div>
@@ -2240,7 +2253,7 @@
       );
     }
 
-    function PMPortal({ teams, cohorts, meetings, settings, authenticated, onAuthenticate, onUpdateTeam, onAddTeam, onUpdateCohorts, onUpdateMeetings, onUpdateSettings, onBack }) {
+    function PMPortal({ teams, cohorts, meetings, settings, authenticated, onAuthenticate, onUpdateTeam, onAddTeam, onDeleteTeam, onUpdateCohorts, onUpdateMeetings, onUpdateSettings, onBack }) {
       const [tab, setTab] = useState('overview');
       const [detailTeamId, setDetailTeamId] = useState(null);
 
@@ -2315,7 +2328,7 @@
           </div>
 
           {tab === 'overview' && !detailTeam && (
-            <Dashboard teams={teams} cohorts={cohorts} onAddTeam={onAddTeam} onSelectTeam={id => setDetailTeamId(id)} onUpdateTeam={onUpdateTeam} onUpdateCohorts={onUpdateCohorts} />
+            <Dashboard teams={teams} cohorts={cohorts} onAddTeam={onAddTeam} onSelectTeam={id => setDetailTeamId(id)} onUpdateTeam={onUpdateTeam} onDeleteTeam={onDeleteTeam} onUpdateCohorts={onUpdateCohorts} />
           )}
           {tab === 'overview' && detailTeam && (
             <TeamDetail team={detailTeam} onUpdate={onUpdateTeam} />
@@ -2376,6 +2389,7 @@
 
       const updateTeam = (updated) => setTeams(ts => ts.map(t => t.id === updated.id ? updated : t));
       const addTeam = (team) => setTeams(ts => [...ts, team]);
+      const deleteTeam = (id) => setTeams(ts => ts.filter(t => t.id !== id));
 
       const teamPortalTeam = teams.find(t => t.id === teamPortalId);
 
@@ -2402,6 +2416,7 @@
             onAuthenticate={() => setPmAuthenticated(true)}
             onUpdateTeam={updateTeam}
             onAddTeam={addTeam}
+            onDeleteTeam={deleteTeam}
             onUpdateCohorts={setCohorts}
             onUpdateMeetings={setMeetings}
             onUpdateSettings={setSettings}
