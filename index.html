@@ -1309,7 +1309,7 @@
           const d = new Date(mtg.date + 'T' + (mtg.time || '00:00'));
           return d >= now && (mtg.type === 'group' || (mtg.teamIds || []).includes(team.id));
         })
-        .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+        .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
       const nextMeeting = upcoming[0];
 
       return (
@@ -1467,23 +1467,34 @@
       const now = new Date();
       const relevant = [...meetings]
         .filter(mtg => mtg.type === 'group' || (mtg.teamIds || []).includes(team.id))
-        .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
-      const upcoming = relevant.filter(m => new Date(m.date + 'T' + (m.time || '23:59')) >= now);
-      const past = relevant.filter(m => new Date(m.date + 'T' + (m.time || '23:59')) < now);
+        .sort((a, b) => {
+          if (!a.date && !b.date) return 0;
+          if (!a.date) return 1;
+          if (!b.date) return -1;
+          return (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''));
+        });
+      const tbd = relevant.filter(m => !m.date);
+      const upcoming = relevant.filter(m => m.date && new Date(m.date + 'T' + (m.time || '23:59')) >= now);
+      const past = relevant.filter(m => m.date && new Date(m.date + 'T' + (m.time || '23:59')) < now);
 
       const MtgCard = ({ mtg, dim }) => (
         <div style={{ opacity: dim ? 0.5 : 1 }} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-gray-900">{mtg.title}</div>
-              <div className="text-sm text-gray-500">{mtg.date}{mtg.time ? ' at ' + mtg.time : ''}</div>
+              <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                <span className="font-semibold text-gray-900">{mtg.title}</span>
+                {!mtg.date && <span className="text-xs text-orange-500 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">Date TBD</span>}
+              </div>
+              <div className="text-sm text-gray-500">
+                {mtg.date ? (mtg.date + (mtg.time ? ' at ' + mtg.time : '')) : 'Date and time not yet scheduled'}
+              </div>
               {mtg.description && <div className="text-xs text-gray-400 mt-1">{mtg.description}</div>}
               <div className="text-xs mt-1">
                 <span style={{ background: mtg.type === 'group' ? '#EFF6FF' : '#F5F3FF', color: mtg.type === 'group' ? '#1D4ED8' : '#6D28D9' }}
                   className="px-2 py-0.5 rounded-full font-medium">{mtg.type === 'group' ? 'Group Session' : 'Individual'}</span>
               </div>
             </div>
-            {mtg.zoomLink && !dim && (
+            {mtg.zoomLink && mtg.date && !dim && (
               <a href={mtg.zoomLink} target="_blank" rel="noreferrer"
                 style={{ background: '#2563EB' }}
                 className="text-white text-xs px-3 py-1.5 rounded-lg font-semibold hover:opacity-90 ml-3 flex-shrink-0">
@@ -1497,7 +1508,7 @@
       return (
         <div className="max-w-3xl mx-auto px-4 py-6">
           <div className="font-bold text-gray-900 text-lg mb-4">Meeting Schedule</div>
-          {upcoming.length === 0 && past.length === 0 && (
+          {relevant.length === 0 && (
             <div className="text-center py-16 text-gray-400">No meetings scheduled yet.</div>
           )}
           {upcoming.length > 0 && (
@@ -1505,6 +1516,14 @@
               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Upcoming</div>
               <div className="space-y-3 mb-6">
                 {upcoming.map(m => <MtgCard key={m.id} mtg={m} dim={false} />)}
+              </div>
+            </>
+          )}
+          {tbd.length > 0 && (
+            <>
+              <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide mb-3">Date Not Yet Scheduled</div>
+              <div className="space-y-3 mb-6">
+                {tbd.map(m => <MtgCard key={m.id} mtg={m} dim={false} />)}
               </div>
             </>
           )}
@@ -1833,7 +1852,7 @@
         setForm(f => ({ ...f, teamIds: f.teamIds.includes(id) ? f.teamIds.filter(x => x !== id) : [...f.teamIds, id] }));
       };
 
-      const submit = (e) => { e.preventDefault(); if (form.title.trim() && form.date) { onSave(form); onClose(); } };
+      const submit = (e) => { e.preventDefault(); if (form.title.trim()) { onSave(form); onClose(); } };
 
       return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1852,7 +1871,7 @@
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Date *</label>
-                  <input type="date" value={form.date} onChange={e => set('date', e.target.value)} required
+                  <input type="date" value={form.date} onChange={e => set('date', e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
                 </div>
                 <div>
@@ -1910,7 +1929,12 @@
       const [showAdd, setShowAdd] = useState(false);
       const [editMtg, setEditMtg] = useState(null);
       const now = new Date();
-      const sorted = [...meetings].sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+      const sorted = [...meetings].sort((a, b) => {
+        if (!a.date && !b.date) return 0;
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''));
+      });
 
       const saveMeeting = (m) => {
         const exists = meetings.find(x => x.id === m.id);
@@ -1939,18 +1963,22 @@
           ) : (
             <div className="space-y-3">
               {sorted.map(mtg => {
-                const isPast = new Date(mtg.date + 'T' + (mtg.time || '23:59')) < now;
+                const noDate = !mtg.date;
+                const isPast = !noDate && new Date(mtg.date + 'T' + (mtg.time || '23:59')) < now;
                 return (
                   <div key={mtg.id} style={{ opacity: isPast ? 0.6 : 1 }} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="font-semibold text-gray-900">{mtg.title}</span>
                           <span style={{ background: mtg.type === 'group' ? '#EFF6FF' : '#F5F3FF', color: mtg.type === 'group' ? '#1D4ED8' : '#6D28D9' }}
                             className="text-xs px-2 py-0.5 rounded-full font-medium">{mtg.type === 'group' ? 'Group' : 'Individual'}</span>
                           {isPast && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Past</span>}
+                          {noDate && <span className="text-xs text-orange-500 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">Date TBD</span>}
                         </div>
-                        <div className="text-sm text-gray-500">{mtg.date}{mtg.time ? ' at ' + mtg.time : ''}</div>
+                        <div className="text-sm text-gray-500">
+                          {noDate ? 'Date and time not yet scheduled' : (mtg.date + (mtg.time ? ' at ' + mtg.time : ''))}
+                        </div>
                         {mtg.description && <div className="text-xs text-gray-400 mt-1">{mtg.description}</div>}
                         {mtg.zoomLink && <div className="text-xs text-blue-500 truncate mt-1">{mtg.zoomLink}</div>}
                         {mtg.type === 'individual' && mtg.teamIds.length > 0 && (
@@ -1961,7 +1989,8 @@
                       </div>
                       <div className="flex gap-2 flex-shrink-0">
                         <button onClick={() => setEditMtg(mtg)}
-                          className="text-xs text-gray-400 hover:text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">Edit</button>
+                          style={noDate ? { background: '#FFF7ED', color: '#C2410C', border: '1px solid #FED7AA' } : { color: '#6B7280', border: '1px solid #E5E7EB' }}
+                          className="text-xs px-2.5 py-1.5 rounded-lg hover:opacity-80 font-medium">{noDate ? 'Add Date' : 'Edit'}</button>
                         <button onClick={() => deleteMeeting(mtg.id)}
                           className="text-xs text-red-400 hover:text-red-600 border border-red-100 px-2.5 py-1.5 rounded-lg hover:bg-red-50">Delete</button>
                       </div>
@@ -2130,14 +2159,24 @@
 
     const DEFAULT_SETTINGS = { programName: 'Kairos Program', canvasUrl: '', crmUrl: '', pmPin: '1234' };
 
+    const DEFAULT_MEETINGS = [
+      { id: 'mtg_m0', title: 'M0 Onboarding Session', date: '', time: '', type: 'group', teamIds: [], zoomLink: '', description: 'Program kickoff. Mom Test methodology, Translation Memo briefing, communication norms, and program expectations.' },
+      { id: 'mtg_m1', title: 'M1 Cohort Review - Problem Hypothesis', date: '', time: '', type: 'group', teamIds: [], zoomLink: '', description: 'Teams present problem hypotheses and UBIES stakeholder maps. Discovery call progress check (target: 15+ calls). Oh Sh*t Moment debrief.' },
+      { id: 'mtg_m2', title: 'M2 Go/No-Go Review', date: '', time: '', type: 'group', teamIds: [], zoomLink: '', description: 'Market Reality Check presentations. Competitor Takedown Grid and TAM review. MD issues Go/No-Go decisions. Path A/B/C declarations.' },
+      { id: 'mtg_m3', title: 'M3 Solution Design Review', date: '', time: '', type: 'group', teamIds: [], zoomLink: '', description: 'Prototype presentations and self-explanatory test results. Feature Funeral recap. Brand identity review. LTV/CAC napkin math.' },
+      { id: 'mtg_m4', title: 'M4 IAB Hot Seat + Solution Gate', date: '', time: '', type: 'group', teamIds: [], zoomLink: '', description: 'Industry Advisory Board Hot Seat presentations. SCAMPER review. Two Stories rehearsal. MD issues Solution Gate verdict: Green / Yellow / Red.' },
+      { id: 'mtg_m5', title: 'M5 Pilot Sales Review', date: '', time: '', type: 'group', teamIds: [], zoomLink: '', description: 'Sales Commitment Tracker review. Pilot plan presentations. Wizard of Oz walkthrough. Evidence of Demand tally against Contract Ladder tiers.' },
+      { id: 'mtg_m6', title: 'Demo Day', date: '', time: '', type: 'group', teamIds: [], zoomLink: '', description: '20-minute investor-ready pitches. Data Room review. Graduation Verdict issued by MD. Post-Demo Day follow-up strategy.' },
+    ];
+
     function App() {
       const [teams, setTeams] = useState(() => {
         try { const s = localStorage.getItem('kairos_v1_teams'); return s ? JSON.parse(s) : []; }
         catch { return []; }
       });
       const [meetings, setMeetings] = useState(() => {
-        try { const s = localStorage.getItem('kairos_v1_meetings'); return s ? JSON.parse(s) : []; }
-        catch { return []; }
+        try { const s = localStorage.getItem('kairos_v1_meetings'); return s ? JSON.parse(s) : DEFAULT_MEETINGS; }
+        catch { return DEFAULT_MEETINGS; }
       });
       const [settings, setSettings] = useState(() => {
         try { const s = localStorage.getItem('kairos_v1_settings'); return s ? { ...DEFAULT_SETTINGS, ...JSON.parse(s) } : DEFAULT_SETTINGS; }
