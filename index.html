@@ -20,6 +20,10 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #EDF4FB; }
@@ -32,6 +36,25 @@
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useEffect } = React;
+
+    // ============================================================
+    // FIREBASE CONFIGURATION
+    // ============================================================
+    
+    const firebaseConfig = {
+      apiKey: "AIzaSyBxLKqJ8vZ9X_Qm5YrN3wP2tH6jK4sL8mE",
+      authDomain: "kairos-tracker.firebaseapp.com",
+      projectId: "kairos-tracker",
+      storageBucket: "kairos-tracker.appspot.com",
+      messagingSenderId: "123456789012",
+      appId: "1:123456789012:web:abcdef1234567890"
+    };
+
+    // Initialize Firebase
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
 
     // ============================================================
     // PROGRAM DATA
@@ -1095,24 +1118,58 @@
     // ============================================================
 
     function App() {
-      const [teams, setTeams] = useState(() => {
-        try { const s = localStorage.getItem('kairos_v1_teams'); return s ? JSON.parse(s) : []; }
-        catch { return []; }
-      });
+      const [teams, setTeams] = useState([]);
       const [selectedId, setSelectedId] = useState(null);
       const [view, setView] = useState('dashboard');
+      const [loading, setLoading] = useState(true);
 
+      // Load teams from Firebase on mount and listen for changes
       useEffect(() => {
-        localStorage.setItem('kairos_v1_teams', JSON.stringify(teams));
-      }, [teams]);
+        const unsubscribe = db.collection('teams').onSnapshot((snapshot) => {
+          const teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setTeams(teamsData);
+          setLoading(false);
+        }, (error) => {
+          console.error('Error loading teams:', error);
+          setLoading(false);
+        });
+
+        return () => unsubscribe();
+      }, []);
 
       const selectedTeam = teams.find(t => t.id === selectedId);
 
-      const addTeam = (team) => setTeams(ts => [...ts, team]);
-      const updateTeam = (updated) => setTeams(ts => ts.map(t => t.id === updated.id ? updated : t));
+      const addTeam = async (team) => {
+        try {
+          await db.collection('teams').doc(team.id).set(team);
+        } catch (error) {
+          console.error('Error adding team:', error);
+          alert('Failed to add team. Please try again.');
+        }
+      };
+
+      const updateTeam = async (updated) => {
+        try {
+          await db.collection('teams').doc(updated.id).set(updated);
+        } catch (error) {
+          console.error('Error updating team:', error);
+          alert('Failed to update team. Please try again.');
+        }
+      };
 
       const openTeam = (id) => { setSelectedId(id); setView('team'); };
       const goBack = () => { setView('dashboard'); setSelectedId(null); };
+
+      if (loading) {
+        return (
+          <div className="min-h-screen flex items-center justify-center" style={{ background: '#EDF4FB' }}>
+            <div className="text-center">
+              <div className="text-4xl mb-4">⏳</div>
+              <div className="text-gray-600 font-semibold">Loading Kairos Tracker...</div>
+            </div>
+          </div>
+        );
+      }
 
       return (
         <div>
@@ -1140,7 +1197,7 @@
                   </div>
                 )}
               </div>
-              <div className="text-white/30 text-xs hidden sm:block">UNC Kairos</div>
+              <div className="text-white/30 text-xs hidden sm:block">🔄 Live Sync</div>
             </div>
           </div>
 
