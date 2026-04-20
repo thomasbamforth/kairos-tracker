@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Initialize Firestore - Kairos Tracker</title>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    button {
+      background: #4B9CD3;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    .success {
+      background: #10B981;
+      color: white;
+      padding: 15px;
+      border-radius: 6px;
+      margin: 10px 0;
+    }
+    .error {
+      background: #EF4444;
+      color: white;
+      padding: 15px;
+      border-radius: 6px;
+      margin: 10px 0;
+    }
+    .info {
+      background: #3B82F6;
+      color: white;
+      padding: 15px;
+      border-radius: 6px;
+      margin: 10px 0;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔧 Kairos Tracker - Firestore Initialization</h1>
+    <p>This tool will initialize your Firestore database with default settings and sample data.</p>
+    
+    <div id="status"></div>
+    
+    <h2>Actions:</h2>
+    <button onclick="checkConnection()">1. Check Firebase Connection</button>
+    <button onclick="initializeSettings()">2. Initialize Settings (PIN: 1234)</button>
+    <button onclick="createSampleData()">3. Create Sample Data</button>
+    <button onclick="viewCurrentData()">4. View Current Data</button>
+    <button onclick="resetPIN()">5. Reset PIN to 1234</button>
+    
+    <div id="output"></div>
+  </div>
+
+  <script>
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyBct-saxv2_u2SpEaObAzo0rsWB34mA6Ck",
+      authDomain: "kairos-tracker-e7486.firebaseapp.com",
+      databaseURL: "https://kairos-tracker-e7486-default-rtdb.firebaseio.com",
+      projectId: "kairos-tracker-e7486",
+      storageBucket: "kairos-tracker-e7486.firebasestorage.app",
+      messagingSenderId: "256280721389",
+      appId: "1:256280721389:web:ff97c99bec5685489e99e4",
+      measurementId: "G-2WSFFKP603"
+    };
+
+    // Initialize Firebase
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+
+    function showStatus(message, type = 'info') {
+      const statusDiv = document.getElementById('status');
+      statusDiv.innerHTML = `<div class="${type}">${message}</div>`;
+    }
+
+    function showOutput(content) {
+      const outputDiv = document.getElementById('output');
+      outputDiv.innerHTML = `<h3>Output:</h3><pre>${content}</pre>`;
+    }
+
+    async function checkConnection() {
+      showStatus('Checking Firebase connection...', 'info');
+      try {
+        const testDoc = await db.collection('_test').doc('connection').set({
+          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          test: true
+        });
+        await db.collection('_test').doc('connection').delete();
+        showStatus('✅ Firebase connection successful!', 'success');
+      } catch (error) {
+        showStatus(`❌ Firebase connection failed: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+
+    async function initializeSettings() {
+      showStatus('Initializing settings...', 'info');
+      try {
+        const defaultSettings = {
+          programName: 'Kairos Accelerator',
+          pmPin: '1234',
+          canvasUrl: '',
+          crmUrl: '',
+          airtableUrl: '',
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        await db.collection('settings').doc('program').set(defaultSettings, { merge: true });
+        showStatus('✅ Settings initialized successfully! PIN is now: 1234', 'success');
+        showOutput(JSON.stringify(defaultSettings, null, 2));
+      } catch (error) {
+        showStatus(`❌ Failed to initialize settings: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+
+    async function createSampleData() {
+      showStatus('Creating sample data...', 'info');
+      try {
+        // Create a sample cohort
+        const cohortRef = await db.collection('cohorts').add({
+          name: 'Spring 2024',
+          startDate: firebase.firestore.FieldValue.serverTimestamp(),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        // Create sample teams
+        const team1Ref = await db.collection('teams').add({
+          name: 'Team Alpha',
+          cohortId: cohortRef.id,
+          currentGate: 'M0',
+          currentPhase: 'Pre-Program',
+          gates: {
+            M0: {
+              checklist: {},
+              completionPercentage: 0
+            }
+          },
+          assignments: {},
+          callCount: 0,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        const team2Ref = await db.collection('teams').add({
+          name: 'Team Beta',
+          cohortId: cohortRef.id,
+          currentGate: 'M0',
+          currentPhase: 'Pre-Program',
+          gates: {
+            M0: {
+              checklist: {},
+              completionPercentage: 0
+            }
+          },
+          assignments: {},
+          callCount: 0,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Create sample meetings
+        const meetings = ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'];
+        const meetingNames = {
+          M0: 'Onboarding',
+          M1: 'Problem Discovery',
+          M2: 'Problem Validation',
+          M3: 'Solution Design',
+          M4: 'Pilot Launch',
+          M5: 'Traction & Growth',
+          M6: 'Demo Day'
+        };
+
+        for (const meeting of meetings) {
+          await db.collection('schedule').add({
+            meetingName: meeting,
+            date: null,
+            zoomLink: '',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
+
+        showStatus('✅ Sample data created successfully!', 'success');
+        showOutput(`Created:
+- 1 Cohort: Spring 2024
+- 2 Teams: Team Alpha, Team Beta
+- 7 Meetings: M0-M6`);
+      } catch (error) {
+        showStatus(`❌ Failed to create sample data: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+
+    async function viewCurrentData() {
+      showStatus('Fetching current data...', 'info');
+      try {
+        const settings = await db.collection('settings').doc('program').get();
+        const teams = await db.collection('teams').get();
+        const cohorts = await db.collection('cohorts').get();
+        const meetings = await db.collection('schedule').get();
+
+        const data = {
+          settings: settings.exists ? settings.data() : 'Not found',
+          teamsCount: teams.size,
+          cohortsCount: cohorts.size,
+          meetingsCount: meetings.size,
+          teams: teams.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+          cohorts: cohorts.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+          meetings: meetings.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        };
+
+        showStatus('✅ Data fetched successfully!', 'success');
+        showOutput(JSON.stringify(data, null, 2));
+      } catch (error) {
+        showStatus(`❌ Failed to fetch data: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+
+    async function resetPIN() {
+      showStatus('Resetting PIN to 1234...', 'info');
+      try {
+        await db.collection('settings').doc('program').set({
+          pmPin: '1234',
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        
+        // Verify the PIN was set
+        const doc = await db.collection('settings').doc('program').get();
+        const actualPin = doc.data().pmPin;
+        
+        showStatus(`✅ PIN reset successfully! Current PIN: ${actualPin}`, 'success');
+        showOutput(`PIN is now: ${actualPin}\n\nYou can now log in to the PM Portal with PIN: ${actualPin}`);
+      } catch (error) {
+        showStatus(`❌ Failed to reset PIN: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+
+    // Auto-check connection on load
+    window.addEventListener('load', () => {
+      showStatus('Ready! Click "Check Firebase Connection" to begin.', 'info');
+    });
+  </script>
+</body>
+</html>
