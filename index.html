@@ -1144,11 +1144,26 @@
       const [dbError, setDbError] = useState(null);
 
       useEffect(() => {
+        // Timeout fallback — if Firestore doesn't respond in 8s, show error
+        const timeout = setTimeout(() => {
+          setDbError('Database not responding. Firestore security rules may need to be configured. See console for details.');
+          setLoading(false);
+        }, 8000);
+
         const unsub = db.collection('teams').onSnapshot(
-          snap => { setTeams(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false); },
-          err  => { console.error(err); setDbError('Cannot reach database. Check your connection.'); setLoading(false); }
+          snap => {
+            clearTimeout(timeout);
+            setTeams(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            setLoading(false);
+          },
+          err => {
+            clearTimeout(timeout);
+            console.error('Firestore error:', err);
+            setDbError(`Database error: ${err.message}. Go to Firebase Console → Firestore → Rules and allow read/write access.`);
+            setLoading(false);
+          }
         );
-        return () => unsub();
+        return () => { unsub(); clearTimeout(timeout); };
       }, []);
 
       const selectedTeam = teams.find(t => t.id === selectedId);
@@ -1180,12 +1195,22 @@
 
       if (dbError) return (
         <div className="min-h-screen flex items-center justify-center" style={{ background: '#EDF4FB' }}>
-          <div className="text-center max-w-sm px-4">
-            <div className="text-4xl mb-3">⚠️</div>
-            <div className="font-bold text-gray-900 mb-2">Connection Error</div>
-            <div className="text-gray-500 text-sm mb-4">{dbError}</div>
+          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg mx-4">
+            <div className="text-4xl mb-3 text-center">⚠️</div>
+            <div className="font-bold text-gray-900 text-lg mb-2 text-center">Database Not Accessible</div>
+            <div className="text-gray-500 text-sm mb-5 text-center">{dbError}</div>
+            <div className="bg-gray-50 rounded-xl p-4 text-sm mb-5">
+              <div className="font-semibold text-gray-800 mb-2">Fix in 3 steps:</div>
+              <ol className="space-y-1 text-gray-600 list-decimal list-inside">
+                <li>Go to <a href="https://console.firebase.google.com/project/kairos-tracker-e7486/firestore/rules" target="_blank" className="text-blue-600 underline">Firebase Console → Firestore Rules</a></li>
+                <li>Replace all rules with: <code className="bg-gray-200 px-1 rounded text-xs">allow read, write: if true;</code></li>
+                <li>Click <strong>Publish</strong>, then reload this page</li>
+              </ol>
+            </div>
             <button onClick={() => window.location.reload()} style={{ background: '#4B9CD3' }}
-              className="text-white px-5 py-2 rounded-lg font-medium hover:opacity-90">Retry</button>
+              className="w-full text-white py-2.5 rounded-lg font-medium hover:opacity-90">
+              Reload Page
+            </button>
           </div>
         </div>
       );
