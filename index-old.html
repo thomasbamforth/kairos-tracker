@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kairos Program Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            carolina: '#4B9CD3',
+            navy: '#13294B',
+          }
+        }
+      }
+    }
+  </script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #EDF4FB; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #4B9CD3; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ============================================================
+    // PROGRAM DATA
+    // ============================================================
+
+    const PHASES = {
+      preprogram: { label: 'Pre-Program', color: '#6B7280', bg: '#F3F4F6', border: '#D1D5DB' },
+      validation:  { label: 'Problem Validation', color: '#1D4ED8', bg: '#EFF6FF', border: '#BFDBFE' },
+      solution:    { label: 'Solution Design', color: '#6D28D9', bg: '#F5F3FF', border: '#DDD6FE' },
+      pilot:       { label: 'Pilot / Traction', color: '#0F766E', bg: '#F0FDFA', border: '#99F6E4' },
+      demoday:     { label: 'Demo Day', color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
+    };
+
+    const MONTHS = [
+      {
+        id: 0, label: 'M0', name: 'Onboarding & Foundation',
+        phase: 'preprogram', callTarget: null,
+        objective: 'Filter for commitment and establish a shared intellectual baseline before Month 1 live engagement.',
+        keyActivities: ['Mom Test reflection', 'Videos 0.1-0.7', 'Translation Memo', 'Bad Question Quiz', 'Communication Norms'],
+        gates: [
+          { id: 'm0g1', label: 'Mom Test reflection completed (video response)' },
+          { id: 'm0g2', label: 'Videos 0.1-0.7 watched and synthesized' },
+          { id: 'm0g3', label: 'Translation Memo submitted with Faculty sign-off (2-page, top 3 papers)' },
+          { id: 'm0g4', label: 'Bad Question Quiz passed (80% threshold)' },
+          { id: 'm0g5', label: 'Founder-Faculty Communication Norms Document agreed upon' },
+        ],
+        assignments: [
+          { id: 'm0a1', title: 'Mom Test Reflection', desc: 'Video response reflecting on Mom Test methodology and interview principles' },
+          { id: 'm0a2', title: 'Translation Memo', desc: "2-page memo translating Faculty's top 3 academic papers into venture relevance" },
+          { id: 'm0a3', title: 'Bad Question Quiz', desc: 'Reflection quiz on discovery call mistakes - must pass at 80%' },
+          { id: 'm0a4', title: 'Communication Norms Document', desc: 'Agreed-upon working relationship expectations between Founder Fellow and Faculty Advisor' },
+        ],
+        gateDecision: false,
+      },
+      {
+        id: 1, label: 'M1', name: 'Problem Hypothesis',
+        phase: 'validation', callTarget: 15,
+        objective: 'Establish discovery discipline and force granular problem definition through 15+ customer conversations.',
+        keyActivities: ['Cold outreach', 'Mom Test interviews', 'UBIES stakeholder mapping', 'Bottom-up TAM draft', 'CRM habit building'],
+        gates: [
+          { id: 'm1g1', label: '15+ discovery calls logged in CRM with structured tags' },
+          { id: 'm1g2', label: '3-8 problem hypotheses with 3+ direct verbatim customer quotes each' },
+          { id: 'm1g3', label: 'UBIES map with real job titles and named Saboteur' },
+          { id: 'm1g4', label: 'Bottom-up TAM draft submitted' },
+          { id: 'm1g5', label: 'Quizzes 3-5 passed (80% threshold)' },
+          { id: 'm1g6', label: 'Month 1 Report submitted (Hypothesis / Evidence / Verdict / Oh Sh*t Moment)' },
+        ],
+        assignments: [
+          { id: 'm1a1', title: 'Discovery Call Log (15+)', desc: '15+ calls with structured tags, key verbatim quotes, UBIES mapping per contact' },
+          { id: 'm1a2', title: 'Problem Hypotheses (3-8)', desc: 'Each hypothesis supported by 3+ direct customer quotes - not summaries' },
+          { id: 'm1a3', title: 'UBIES Stakeholder Map', desc: 'Real job titles mapped to User / Buyer / Influencer / Economic / Saboteur, with named Saboteur' },
+          { id: 'm1a4', title: 'Bottom-Up TAM Draft', desc: 'Total Addressable Market calculation using bottom-up methodology' },
+          { id: 'm1a5', title: 'Month 1 Report', desc: 'Structured report: Hypothesis -> Evidence -> Verdict -> Oh Sh*t Moment' },
+        ],
+        gateDecision: false,
+      },
+      {
+        id: 2, label: 'M2', name: 'Market Reality Check',
+        phase: 'validation', callTarget: 30,
+        objective: 'First major filter: determine which teams proceed to solution design via Path A / B / C routing.',
+        keyActivities: ['Competitive landscape mapping', 'Bottom-up market math', 'Path declaration', 'Crazy 8s ideation', 'IAB Hot Seat'],
+        gates: [
+          { id: 'm2g1', label: '30+ discovery calls logged (cumulative)' },
+          { id: 'm2g2', label: '1-3 narrowed hypotheses with written justification' },
+          { id: 'm2g3', label: 'Competitor Takedown Grid completed (2x2 incl. Status Quo, Gold Standard, nonprofit, government)' },
+          { id: 'm2g4', label: 'Bottom-up TAM with Q x P methodology completed' },
+          { id: 'm2g5', label: 'Path declared in writing: A (commercial) / B (alternative) / C (research loop)' },
+          { id: 'm2g6', label: 'Crazy 8s sketches completed (8 solution variations)' },
+          { id: 'm2g7', label: 'Month 2 Report submitted' },
+        ],
+        assignments: [
+          { id: 'm2a1', title: 'Competitor Takedown Grid', desc: '2x2 matrix including Status Quo, Gold Standard, direct competitors, nonprofits, government solutions' },
+          { id: 'm2a2', title: 'Bottom-Up TAM (Q x P)', desc: 'Market sizing using Quantity x Price with documented assumptions' },
+          { id: 'm2a3', title: 'Path Declaration', desc: 'Written: Path A (commercial) / Path B (alternative commercialization) / Path C (research loop)' },
+          { id: 'm2a4', title: 'Crazy 8s Sketches', desc: '8 distinct solution ideation variations from timed exercise' },
+          { id: 'm2a5', title: 'Month 2 Report', desc: 'Market reality check summary with hypothesis narrowing rationale' },
+        ],
+        gateDecision: true,
+        gateDecisionLabel: 'Go / No-Go Decision',
+        gateDecisionOptions: [
+          { value: 'go', label: 'Go - Proceed to Month 3 (Solution Design)', color: 'green' },
+          { value: 'nogo', label: 'No-Go - Exit / Archive / Pivot', color: 'red' },
+        ],
+      },
+      {
+        id: 3, label: 'M3', name: 'Solution Design & Prototype',
+        phase: 'solution', callTarget: null,
+        objective: "Resist over-building. Produce a self-explanatory Solution Hypothesis communicating Pain, Superpower, and Value without any explanation.",
+        keyActivities: ['Worst Possible Idea exercise', 'Feature Funeral', 'No-code prototype (3-5 screens)', 'Self-explanatory test', 'Brand identity', 'LTV/CAC napkin math'],
+        gates: [
+          { id: 'm3g1', label: 'One problem hypothesis selected with written justification' },
+          { id: 'm3g2', label: 'Feature Funeral completed (one core feature; rest in V2 Graveyard)' },
+          { id: 'm3g3', label: 'Brand identity established (venture name, logo, hex codes)' },
+          { id: 'm3g4', label: 'Clickable prototype built in no-code tool (3-5 screens: Pain -> Superpower -> Value)' },
+          { id: 'm3g5', label: 'Prototype tested with 3+ users from target buyer group; feedback logged' },
+          { id: 'm3g6', label: 'Self-explanatory test passed (user navigates without instruction, asks about pricing/access)' },
+          { id: 'm3g7', label: 'LTV/CAC napkin math attempted with all assumptions documented' },
+          { id: 'm3g8', label: 'Quizzes 6-7 passed (80% threshold)' },
+        ],
+        assignments: [
+          { id: 'm3a1', title: 'Feature Funeral Document', desc: 'Core feature selected; V2 Graveyard list with rationale for each deferred feature' },
+          { id: 'm3a2', title: 'Brand Identity Package', desc: 'Venture name, logo file, hex color codes' },
+          { id: 'm3a3', title: 'Clickable Prototype V1', desc: '3-5 screens in no-code tool (Figma, Loveable, etc.) showing Pain -> Superpower -> Value' },
+          { id: 'm3a4', title: 'User Testing Notes (3+ users)', desc: 'Structured feedback from 3+ target buyers testing prototype without instruction' },
+          { id: 'm3a5', title: 'LTV/CAC Napkin Math', desc: 'Rough unit economics with all assumptions documented even if estimates' },
+          { id: 'm3a6', title: 'Month 3 Report', desc: 'Prototype link + self-explanatory test results + key design decisions' },
+        ],
+        gateDecision: false,
+      },
+      {
+        id: 4, label: 'M4', name: 'Positioning & Validation',
+        phase: 'solution', callTarget: 50,
+        objective: 'Last month before pilot sales. Sharpen solution via SCAMPER. Develop Heart and Head stories. MD issues Solution Gate verdict.',
+        keyActivities: ['SCAMPER Sprint (7 rounds)', 'Analogy Protocol (4 personas)', 'Two Stories (Heart + Head)', 'Solution Gate Deck', 'IAB Hot Seat'],
+        gates: [
+          { id: 'm4g1', label: '50+ discovery calls logged (cumulative)' },
+          { id: 'm4g2', label: 'V2 prototype incorporating 3 documented SCAMPER Iterative Shifts' },
+          { id: 'm4g3', label: 'LTV/CAC napkin math completed with documented assumptions' },
+          { id: 'm4g4', label: 'Two Stories drafted and rehearsed (Heart 2 min + Head 2 min)' },
+          { id: 'm4g5', label: 'Solution Gate Deck completed (10 slides, one idea per slide)' },
+          { id: 'm4g6', label: 'One-Pager for IAB submitted' },
+          { id: 'm4g7', label: 'Initial Pilot Plans drafted for top 3 prospects' },
+          { id: 'm4g8', label: 'Quiz 8 passed (80% threshold)' },
+        ],
+        assignments: [
+          { id: 'm4a1', title: 'V2 Prototype (SCAMPER)', desc: 'Updated prototype with 3 documented Iterative Shifts from SCAMPER Sprint' },
+          { id: 'm4a2', title: 'SCAMPER Documentation', desc: '3 Iterative Shifts from 7-round SCAMPER Sprint (Substitute, Combine, Adapt, Modify, Put to Another Use, Eliminate, Reverse)' },
+          { id: 'm4a3', title: 'Two Stories Script', desc: 'Heart story (2 min - human impact, patient journey, relief) + Head story (2 min - market size, moat, ROI, exit multiple)' },
+          { id: 'm4a4', title: 'Solution Gate Deck (10 slides)', desc: 'Problem clarity, Competitive moat, Team credibility, Market size, Revenue model, Path sustainability' },
+          { id: 'm4a5', title: 'IAB One-Pager', desc: 'Single-page summary for Industry Advisory Board Hot Seat review' },
+          { id: 'm4a6', title: 'Initial Pilot Plans (3 prospects)', desc: 'Draft plans: Target Buyer + Pain Statement + Fixed Duration + Conversion Trigger' },
+          { id: 'm4a7', title: 'Month 4 Report', desc: 'Green/Yellow/Red self-assessment with written rationale' },
+        ],
+        gateDecision: true,
+        gateDecisionLabel: 'Solution Gate Decision',
+        gateDecisionOptions: [
+          { value: 'green', label: 'Green - Proceed to Month 5 (Pilot Sales)', color: 'green' },
+          { value: 'yellow', label: 'Yellow - Proceed with mandatory business model revision', color: 'yellow' },
+          { value: 'red', label: 'Red - Exit program or transition to research path', color: 'red' },
+        ],
+      },
+      {
+        id: 5, label: 'M5', name: 'Pilot Sales & Build Planning',
+        phase: 'pilot', callTarget: 70,
+        objective: "Transform from researcher to salesperson. Make explicit pilot asks to 5+ prospects. Achieve Evidence of Demand via Contract Ladder.",
+        keyActivities: ['Sales Resistance Lab', 'Pilot Roleplay', 'Manual Backend Map (Wizard of Oz)', 'Contract Ladder', '5+ explicit pilot asks', 'Procurement chain mapping'],
+        gates: [
+          { id: 'm5g1', label: '70+ discovery calls logged (cumulative)' },
+          { id: 'm5g2', label: '5+ explicit pilot asks made and logged in Sales Commitment Tracker' },
+          { id: 'm5g3', label: 'Sales Commitment Tracker submitted (asks, responses, objections logged)' },
+          { id: 'm5g4', label: 'Pilot Plan for top 3 prospects: Target Buyer + Pain Metric + Fixed Duration + Conversion Trigger' },
+          { id: 'm5g5', label: 'Pilot pricing anchored to prospect\'s current cost of the problem (not dev cost)' },
+          { id: 'm5g6', label: 'Kitchen Sink Deck submitted (all slides through Month 5)' },
+          { id: 'm5g7', label: 'Month 5 Report with Pilot Plans and Data Room folder initiated' },
+          { id: 'm5g8', label: 'Quizzes 9-10 passed (80% threshold)' },
+        ],
+        assignments: [
+          { id: 'm5a1', title: 'Sales Commitment Tracker', desc: 'Log of 5+ explicit pilot asks: date, prospect, response (yes/no/not now), objection noted' },
+          { id: 'm5a2', title: 'Pilot Plans (3 prospects)', desc: 'Named buyer with signing authority + measurable pain metric + fixed 60-90 day duration + conversion trigger' },
+          { id: 'm5a3', title: 'Procurement Chain Maps', desc: 'Per-prospect approval chain (e.g. Clinical Dir -> Compliance -> IT -> CFO)' },
+          { id: 'm5a4', title: 'Manual Backend Map (Wizard of Oz)', desc: 'What stays manual vs. gets built; cost per customer for 60-day pilot' },
+          { id: 'm5a5', title: 'Kitchen Sink Deck', desc: 'All slides created throughout the program compiled - will be reduced in Month 6' },
+          { id: 'm5a6', title: 'Month 5 Report + Data Room Folder', desc: 'Pilot plans summary, Evidence of Demand tally (Contract Ladder tier), Data Room folder started' },
+        ],
+        gateDecision: false,
+      },
+      {
+        id: 6, label: 'M6', name: 'Demo Day & Graduation',
+        phase: 'demoday', callTarget: null,
+        objective: "Translate 6 months of learning into polished investor-ready pitches. Execute Demo Day. Receive Graduation Verdict.",
+        keyActivities: ['Kill Your Darlings (deck reduction)', 'Grandma & The Banker test', 'Murder Board (adversarial Q&A)', 'Data Room completion', 'Demo Day (20-min pitch)'],
+        gates: [
+          { id: 'm6g1', label: 'Final Demo Day Deck submitted (20 min max, 72 hours before Demo Day)' },
+          { id: 'm6g2', label: 'Data Room complete and shared with DSO (6 required elements)' },
+          { id: 'm6g3', label: '2-minute pitch video recorded and submitted' },
+          { id: 'm6g4', label: '20-minute pitch rehearsed at full length 2x: once with VC/DSO, once with MD' },
+          { id: 'm6g5', label: 'Quizzes 11-12 passed (80% threshold)' },
+        ],
+        assignments: [
+          { id: 'm6a1', title: 'Final Demo Day Deck (10 slides max)', desc: 'Reduced from Kitchen Sink; one idea per slide; headlines tell full story alone; submitted 72 hrs before Demo Day' },
+          { id: 'm6a2', title: 'Data Room', desc: 'Incorporation plan + IP documentation + Pilot contracts/LOIs + 18-month financial model + Team bios + Regulatory pathway docs' },
+          { id: 'm6a3', title: '2-Minute Pitch Video', desc: 'Recorded pitch video submitted to DSO' },
+          { id: 'm6a4', title: 'Kill Your Darlings Edit Log', desc: 'Documentation of deck reduction via peer voting in Kill Your Darlings workshop' },
+          { id: 'm6a5', title: 'Post-Demo Day Follow-Up Strategy', desc: 'Personalized investor follow-up plan (48-hour rule) with warm intro requests from MD/DSO/IAB' },
+        ],
+        gateDecision: true,
+        gateDecisionLabel: 'Graduation Verdict',
+        gateDecisionOptions: [
+          { value: 'path_a', label: 'Continue - Path A (Commercialization Track)', color: 'green' },
+          { value: 'path_bc', label: 'Continue - Path B/C (Research or Alternative Commercialization)', color: 'blue' },
+          { value: 'archive', label: 'Archive', color: 'gray' },
+        ],
+      },
+    ];
+
+    // ============================================================
+    // UTILITIES
+    // ============================================================
+
+    const genId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
+
+    const pc = (key) => PHASES[key]?.color || '#6B7280';
+    const pb = (key) => PHASES[key]?.bg || '#F3F4F6';
+    const pbl = (key) => PHASES[key]?.border || '#E5E7EB';
+
+    const createTeam = (data) => {
+      const team = {
+        id: genId(),
+        name: data.name || 'New Team',
+        venture: data.venture || '',
+        founder: data.founder || '',
+        faculty: data.faculty || '',
+        coach: data.coach || '',
+        dso: data.dso || '',
+        domain: data.domain || '',
+        cohort: data.cohort || '',
+        notes_general: '',
+        createdAt: new Date().toISOString(),
+        currentMonth: 0,
+        calls: [],
+        gates: {},
+        assignments: {},
+        gateDecisions: {},
+        monthNotes: {},
+      };
+      MONTHS.forEach(m => {
+        team.gates[m.id] = {};
+        m.gates.forEach(g => { team.gates[m.id][g.id] = { completed: false, date: null }; });
+        team.assignments[m.id] = {};
+        m.assignments.forEach(a => { team.assignments[m.id][a.id] = { status: 'not_started', link: '', notes: '', submittedDate: null }; });
+        team.monthNotes[m.id] = '';
+        if (m.gateDecision) team.gateDecisions[m.id] = { decision: null, date: null, notes: '' };
+      });
+      return team;
+    };
+
+    const getGateCompletion = (team, monthId) => {
+      const m = MONTHS.find(x => x.id === monthId);
+      if (!m) return { done: 0, total: 0 };
+      const gates = team.gates[monthId] || {};
+      const done = m.gates.filter(g => gates[g.id]?.completed).length;
+      return { done, total: m.gates.length };
+    };
+
+    const getOverallProgress = (team) => {
+      let total = 0, done = 0;
+      MONTHS.forEach(m => {
+        if (m.id <= team.currentMonth) {
+          const r = getGateCompletion(team, m.id);
+          total += r.total; done += r.done;
+        }
+      });
+      return total > 0 ? Math.round((done / total) * 100) : 0;
+    };
+
+    const currentPhase = (team) => MONTHS.find(m => m.id === team.currentMonth)?.phase || 'preprogram';
+
+    // ============================================================
+    // SUB-COMPONENTS
+    // ============================================================
+
+    function ProgressBar({ value, max, color = '#4B9CD3', h = 6 }) {
+      const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+      return (
+        <div style={{ height: h, background: '#E5E7EB', borderRadius: 999 }} className="w-full overflow-hidden">
+          <div style={{ width: `${pct}%`, background: color, height: '100%', borderRadius: 999, transition: 'width 0.3s ease' }} />
+        </div>
+      );
+    }
+
+    function PhasePill({ phase }) {
+      return (
+        <span style={{ background: pb(phase), color: pc(phase), border: `1px solid ${pbl(phase)}` }}
+          className="text-xs font-medium px-2.5 py-0.5 rounded-full whitespace-nowrap">
+          {PHASES[phase]?.label}
+        </span>
+      );
+    }
+
+    // ============================================================
+    // DASHBOARD
+    // ============================================================
+
+    function StatTile({ label, value, sub, color }) {
+      return (
+        <div className="bg-white rounded-xl p-4 shadow-sm">
+          <div className="text-sm text-gray-500 mb-1">{label}</div>
+          <div style={{ color }} className="text-3xl font-bold">{value}</div>
+          {sub && <div className="text-xs text-gray-400 mt-1">{sub}</div>}
+        </div>
+      );
+    }
+
+    function TeamCard({ team, onClick }) {
+      const phase = currentPhase(team);
+      const calls = team.calls.length;
+      const { done, total } = getGateCompletion(team, team.currentMonth);
+      const monthData = MONTHS.find(m => m.id === team.currentMonth);
+
+      return (
+        <div onClick={onClick} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer border border-gray-100 overflow-hidden">
+          <div style={{ background: pc(phase), height: 4 }} />
+          <div className="p-5">
+            <div className="flex justify-between items-start mb-2">
+              <div className="min-w-0 flex-1 mr-2">
+                <div className="font-bold text-gray-900">{team.name}</div>
+                <div className="text-sm text-gray-500 truncate">{team.venture || '-'}</div>
+              </div>
+              <PhasePill phase={phase} />
+            </div>
+            <div className="text-xs text-gray-400 mb-3 flex flex-wrap gap-x-3">
+              {team.founder && <span>{team.founder}</span>}
+              {team.cohort && <span>Cohort {team.cohort}</span>}
+              {team.domain && <span>{team.domain}</span>}
+            </div>
+
+            <div style={{ background: pb(phase), border: `1px solid ${pbl(phase)}`, borderRadius: 8 }}
+              className="p-2 mb-3 flex items-center justify-between">
+              <div style={{ color: pc(phase) }} className="text-xs font-semibold">
+                {monthData?.label}: {monthData?.name}
+              </div>
+              <div className="text-xs text-gray-500">{done}/{total} gates</div>
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>Gate completion</span><span>{done}/{total}</span>
+                </div>
+                <ProgressBar value={done} max={total} color={pc(phase)} h={5} />
+              </div>
+              {monthData?.callTarget && (
+                <div>
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>Calls (cumulative)</span>
+                    <span className={calls >= monthData.callTarget ? 'text-emerald-600 font-medium' : ''}>{calls} / {monthData.callTarget}+</span>
+                  </div>
+                  <ProgressBar value={calls} max={monthData.callTarget} color={calls >= monthData.callTarget ? '#059669' : '#4B9CD3'} h={5} />
+                </div>
+              )}
+            </div>
+
+            <button style={{ background: '#13294B', color: 'white' }}
+              className="w-full mt-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+              Open Team ->
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function AddTeamModal({ onAdd, onClose }) {
+      const [form, setForm] = useState({ name: '', venture: '', founder: '', faculty: '', coach: '', dso: '', domain: '', cohort: '' });
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+      const submit = (e) => { e.preventDefault(); if (form.name.trim()) { onAdd(createTeam(form)); onClose(); } };
+
+      const fields = [
+        { k: 'name', label: 'Team Name *', ph: 'e.g. Team Alpha', full: true, req: true },
+        { k: 'venture', label: 'Venture Name', ph: 'e.g. CareConnect', full: true },
+        { k: 'founder', label: 'Founder Fellow', ph: 'Full name' },
+        { k: 'faculty', label: 'Faculty Advisor', ph: 'Dr. Name' },
+        { k: 'coach', label: 'Business Venture Coach', ph: 'Coach name' },
+        { k: 'dso', label: 'DSO / Program Staff', ph: 'Staff name' },
+        { k: 'domain', label: 'Domain / Focus Area', ph: 'e.g. Behavioral Health' },
+        { k: 'cohort', label: 'Cohort', ph: 'e.g. Spring 2025' },
+      ];
+
+      return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div style={{ background: '#13294B' }} className="rounded-t-2xl px-6 py-4 flex justify-between items-center">
+              <div>
+                <div className="text-white font-bold text-lg">Add New Team</div>
+                <div className="text-white/60 text-sm">Register a venture team in the Kairos program</div>
+              </div>
+              <button onClick={onClose} className="text-white/60 hover:text-white text-2xl leading-none">x</button>
+            </div>
+            <form onSubmit={submit} className="p-6">
+              <div className="grid grid-cols-2 gap-4 mb-5">
+                {fields.map(f => (
+                  <div key={f.k} className={f.full ? 'col-span-2' : ''}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                    <input type="text" value={form[f.k]} onChange={e => set(f.k, e.target.value)}
+                      placeholder={f.ph} required={f.req}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={onClose}
+                  className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+                <button type="submit" style={{ background: '#4B9CD3' }}
+                  className="flex-1 text-white py-2.5 rounded-lg text-sm font-medium hover:opacity-90">Add Team</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    function Dashboard({ teams, onAddTeam, onSelectTeam }) {
+      const [showAdd, setShowAdd] = useState(false);
+      const [search, setSearch] = useState('');
+      const [filterPhase, setFilterPhase] = useState('all');
+
+      const filtered = teams.filter(t => {
+        const q = search.toLowerCase();
+        if (q && !t.name.toLowerCase().includes(q) && !t.venture.toLowerCase().includes(q) && !t.founder.toLowerCase().includes(q)) return false;
+        if (filterPhase !== 'all' && currentPhase(t) !== filterPhase) return false;
+        return true;
+      });
+
+      const totalCalls = teams.reduce((s, t) => s + t.calls.length, 0);
+      const onTrack = teams.filter(t => {
+        const mt = MONTHS.find(m => m.id === t.currentMonth)?.callTarget;
+        return !mt || t.calls.length >= mt;
+      }).length;
+      const avgProg = teams.length > 0 ? Math.round(teams.reduce((s, t) => s + getOverallProgress(t), 0) / teams.length) : 0;
+
+      return (
+        <div className="min-h-screen" style={{ background: '#EDF4FB' }}>
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <StatTile label="Teams in Program" value={teams.length} sub="active ventures" color="#13294B" />
+              <StatTile label="Total Discovery Calls" value={totalCalls} sub="across all teams" color="#059669" />
+              <StatTile label="On Track" value={`${onTrack}/${teams.length}`} sub="meeting call targets" color="#4B9CD3" />
+              <StatTile label="Avg Gate Completion" value={`${avgProg}%`} sub="overall progress" color="#6D28D9" />
+            </div>
+
+            <div className="flex flex-wrap gap-3 mb-5 items-center">
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search teams, ventures, founders..."
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 min-w-48 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              <select value={filterPhase} onChange={e => setFilterPhase(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <option value="all">All Phases</option>
+                {Object.entries(PHASES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+              <button onClick={() => setShowAdd(true)} style={{ background: '#13294B' }}
+                className="text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90">
+                + Add Team
+              </button>
+            </div>
+
+            {filtered.length === 0 ? (
+              <div className="text-center py-20">
+                <div className="text-5xl mb-4"></div>
+                <div className="text-gray-700 text-xl font-semibold mb-2">
+                  {teams.length === 0 ? 'No teams yet' : 'No results'}
+                </div>
+                <div className="text-gray-400 text-sm mb-6">
+                  {teams.length === 0 ? 'Add your first Kairos venture team to get started.' : 'Try adjusting your search.'}
+                </div>
+                {teams.length === 0 && (
+                  <button onClick={() => setShowAdd(true)} style={{ background: '#4B9CD3' }}
+                    className="text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90">
+                    Add First Team
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filtered.map(t => <TeamCard key={t.id} team={t} onClick={() => onSelectTeam(t.id)} />)}
+              </div>
+            )}
+          </div>
+          {showAdd && <AddTeamModal onAdd={onAddTeam} onClose={() => setShowAdd(false)} />}
+        </div>
+      );
+    }
+
+    // ============================================================
+    // TEAM DETAIL - GATE CHECKLIST
+    // ============================================================
+
+    function GateChecklist({ gates, gateData, onToggle }) {
+      const done = gates.filter(g => gateData[g.id]?.completed).length;
+      return (
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <div className="font-semibold text-gray-800">Gate Requirements</div>
+            <div className="text-sm text-gray-500">{done}/{gates.length} complete</div>
+          </div>
+          <ProgressBar value={done} max={gates.length} color="#4B9CD3" h={4} />
+          <div className="mt-4 space-y-2">
+            {gates.map(g => {
+              const gd = gateData[g.id] || {};
+              return (
+                <div key={g.id}
+                  style={{ background: gd.completed ? '#EFF6FF' : 'white', borderColor: gd.completed ? '#BFDBFE' : '#E5E7EB' }}
+                  className="flex items-start gap-3 p-3 rounded-lg border">
+                  <button onClick={() => onToggle(g.id)}
+                    style={{ background: gd.completed ? '#4B9CD3' : 'white', borderColor: gd.completed ? '#4B9CD3' : '#D1D5DB' }}
+                    className="mt-0.5 w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors">
+                    {gd.completed && <span className="text-white text-xs font-bold">v</span>}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm ${gd.completed ? 'text-blue-700 line-through opacity-70' : 'text-gray-800'}`}>{g.label}</div>
+                    {gd.completed && gd.date && <div className="text-xs text-blue-400 mt-0.5">Completed {gd.date}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // TEAM DETAIL - ASSIGNMENT TRACKER
+    // ============================================================
+
+    const STATUSES = {
+      not_started: { label: 'Not Started', color: '#9CA3AF', bg: '#F9FAFB' },
+      in_progress:  { label: 'In Progress', color: '#D97706', bg: '#FFFBEB' },
+      submitted:    { label: 'Submitted',   color: '#2563EB', bg: '#EFF6FF' },
+      approved:     { label: 'Approved v',  color: '#059669', bg: '#ECFDF5' },
+    };
+
+    function AssignmentTracker({ assignments, assignmentData, onUpdate }) {
+      const approved = assignments.filter(a => assignmentData[a.id]?.status === 'approved').length;
+      return (
+        <div>
+          <div className="flex justify-between items-center mb-3">
+            <div className="font-semibold text-gray-800">Assignments & Deliverables</div>
+            <div className="text-sm text-gray-500">{approved}/{assignments.length} approved</div>
+          </div>
+          <div className="space-y-3">
+            {assignments.map(a => {
+              const ad = assignmentData[a.id] || { status: 'not_started', link: '', notes: '', submittedDate: null };
+              const sc = STATUSES[ad.status] || STATUSES.not_started;
+              return (
+                <div key={a.id} style={{ background: sc.bg, border: `1px solid ${sc.color}30`, borderRadius: 10 }} className="p-4">
+                  <div className="flex items-start gap-3 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 text-sm">{a.title}</div>
+                      <div className="text-xs text-gray-500 mt-0.5 leading-relaxed">{a.desc}</div>
+                    </div>
+                    <select value={ad.status}
+                      onChange={e => onUpdate(a.id, { ...ad, status: e.target.value, submittedDate: e.target.value === 'submitted' && !ad.submittedDate ? new Date().toISOString().split('T')[0] : ad.submittedDate })}
+                      style={{ color: sc.color, background: sc.bg, border: `1px solid ${sc.color}50`, fontSize: 12, fontWeight: 500 }}
+                      className="rounded-md px-2 py-1 flex-shrink-0">
+                      {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  </div>
+                  <input type="text" value={ad.link || ''} onChange={e => onUpdate(a.id, { ...ad, link: e.target.value })}
+                    placeholder="Paste link to document, Figma, Google Drive, etc..."
+                    className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white/80 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+                  {ad.submittedDate && <div className="text-xs text-gray-400 mt-1">Submitted: {ad.submittedDate}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // TEAM DETAIL - CALL LOG
+    // ============================================================
+
+    function AddCallModal({ onAdd, onClose, defaultMonth }) {
+      const [form, setForm] = useState({
+        date: new Date().toISOString().split('T')[0],
+        contactName: '', organization: '', role: '',
+        problem: '', keyQuote: '', ubiRole: 'User',
+        outcome: '', month: defaultMonth,
+      });
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+      const submit = (e) => { e.preventDefault(); onAdd({ ...form, id: genId() }); onClose(); };
+
+      return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div style={{ background: '#059669' }} className="rounded-t-2xl px-6 py-4 flex justify-between items-center">
+              <div>
+                <div className="text-white font-bold">Log Discovery Call</div>
+                <div className="text-white/70 text-sm">Record a customer discovery conversation</div>
+              </div>
+              <button onClick={onClose} className="text-white/60 hover:text-white text-2xl leading-none">x</button>
+            </div>
+            <form onSubmit={submit} className="p-6 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Date *</label>
+                  <input type="date" value={form.date} onChange={e => set('date', e.target.value)} required
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Program Month</label>
+                  <select value={form.month} onChange={e => set('month', Number(e.target.value))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200">
+                    {MONTHS.map(m => <option key={m.id} value={m.id}>M{m.id} - {m.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Contact Name *</label>
+                  <input type="text" value={form.contactName} onChange={e => set('contactName', e.target.value)} required placeholder="Jane Smith"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Organization</label>
+                  <input type="text" value={form.organization} onChange={e => set('organization', e.target.value)} placeholder="UNC Health"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Role / Title</label>
+                  <input type="text" value={form.role} onChange={e => set('role', e.target.value)} placeholder="Clinical Director"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">UBIES Role</label>
+                  <select value={form.ubiRole} onChange={e => set('ubiRole', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200">
+                    {['User','Buyer','Influencer','Economic','Saboteur'].map(r => <option key={r}>{r}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Problem Discussed</label>
+                <input type="text" value={form.problem} onChange={e => set('problem', e.target.value)} placeholder="Patient intake inefficiency - 45 min average per patient"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Key Verbatim Quote</label>
+                <textarea value={form.keyQuote} onChange={e => set('keyQuote', e.target.value)} rows={2}
+                  placeholder="We waste 45 minutes per patient on paperwork - its brutal and staff morale is suffering"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-200" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Outcome / Next Step</label>
+                <input type="text" value={form.outcome} onChange={e => set('outcome', e.target.value)} placeholder="Referred to billing manager; follow up in 2 weeks"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={onClose}
+                  className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+                <button type="submit" style={{ background: '#059669' }}
+                  className="flex-1 text-white py-2.5 rounded-lg text-sm font-medium hover:opacity-90">Log Call</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    const UBIES_COLORS = {
+      User: { bg: '#EFF6FF', color: '#1D4ED8' },
+      Buyer: { bg: '#ECFDF5', color: '#065F46' },
+      Influencer: { bg: '#FFF7ED', color: '#C2410C' },
+      Economic: { bg: '#FAF5FF', color: '#6B21A8' },
+      Saboteur: { bg: '#FFF1F2', color: '#BE123C' },
+    };
+
+    function CallLog({ team, onAddCall, onDeleteCall, selectedMonth }) {
+      const [showAdd, setShowAdd] = useState(false);
+      const [filterRole, setFilterRole] = useState('all');
+      const calls = team.calls;
+      const totalCalls = calls.length;
+      const monthData = MONTHS.find(m => m.id === selectedMonth);
+      const callTarget = monthData?.callTarget;
+
+      // cumulative targets
+      const targets = [{ m: 1, t: 15 }, { m: 2, t: 30 }, { m: 4, t: 50 }, { m: 5, t: 70 }];
+
+      const filtered = filterRole === 'all' ? calls : calls.filter(c => c.ubiRole === filterRole);
+      const ubiCounts = ['User','Buyer','Influencer','Economic','Saboteur'].map(r => ({ r, n: calls.filter(c => c.ubiRole === r).length }));
+
+      return (
+        <div>
+          <div className="flex justify-between items-center mb-3">
+            <div>
+              <div className="font-semibold text-gray-800">Discovery Call Log</div>
+              <div className="text-xs text-gray-500">{totalCalls} total logged{callTarget ? ` . M${selectedMonth} target: ${callTarget}+` : ''}</div>
+            </div>
+            <button onClick={() => setShowAdd(true)} style={{ background: '#059669' }}
+              className="text-white text-sm px-3 py-1.5 rounded-lg font-medium hover:opacity-90">
+              + Log Call
+            </button>
+          </div>
+
+          {/* Cumulative call progress */}
+          <div className="bg-gray-50 rounded-xl p-3 mb-4 space-y-2">
+            {targets.map(({ m, t }) => (
+              <div key={m}>
+                <div className="flex justify-between text-xs text-gray-500 mb-0.5">
+                  <span>Month {m} cumulative target</span>
+                  <span className={totalCalls >= t ? 'text-emerald-600 font-semibold' : ''}>{totalCalls >= t ? 'v ' : ''}{totalCalls}/{t}+</span>
+                </div>
+                <ProgressBar value={totalCalls} max={t} color={totalCalls >= t ? '#059669' : '#4B9CD3'} h={4} />
+              </div>
+            ))}
+          </div>
+
+          {/* UBIES filter chips */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button onClick={() => setFilterRole('all')}
+              style={{ background: filterRole === 'all' ? '#13294B' : '#F3F4F6', color: filterRole === 'all' ? 'white' : '#6B7280' }}
+              className="text-xs px-2.5 py-1 rounded-full font-medium">All ({totalCalls})</button>
+            {ubiCounts.map(({ r, n }) => {
+              const uc = UBIES_COLORS[r];
+              const active = filterRole === r;
+              return (
+                <button key={r} onClick={() => setFilterRole(active ? 'all' : r)}
+                  style={{ background: active ? uc.color : uc.bg, color: active ? 'white' : uc.color, border: `1px solid ${uc.color}30` }}
+                  className="text-xs px-2.5 py-1 rounded-full font-medium">
+                  {r}: {n}
+                </button>
+              );
+            })}
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-xl">
+              {totalCalls === 0 ? "No calls logged yet. Every discovery conversation counts." : "No calls match this filter."}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {[...filtered].reverse().map(call => {
+                const uc = UBIES_COLORS[call.ubiRole] || { bg: '#F3F4F6', color: '#6B7280' };
+                return (
+                  <div key={call.id} style={{ border: '1px solid #E5E7EB' }} className="bg-white rounded-lg p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <span className="font-semibold text-sm text-gray-900">{call.contactName}</span>
+                          {call.organization && <span className="text-xs text-gray-500">@ {call.organization}</span>}
+                          {call.role && <span className="text-xs text-gray-400">. {call.role}</span>}
+                          <span style={{ background: uc.bg, color: uc.color, border: `1px solid ${uc.color}30` }}
+                            className="text-xs px-1.5 py-0.5 rounded-full font-medium">{call.ubiRole}</span>
+                          <span className="text-xs text-gray-300 bg-gray-100 px-1.5 py-0.5 rounded">M{call.month}</span>
+                        </div>
+                        {call.problem && <div className="text-xs text-gray-600 mb-0.5">{call.problem}</div>}
+                        {call.keyQuote && <div className="text-xs text-gray-400 italic">"{call.keyQuote}"</div>}
+                        {call.outcome && <div className="text-xs text-blue-500 mt-0.5">-> {call.outcome}</div>}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        <span className="text-xs text-gray-400">{call.date}</span>
+                        <button onClick={() => onDeleteCall(call.id)} className="text-gray-300 hover:text-red-400 text-lg leading-none">x</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {showAdd && <AddCallModal defaultMonth={selectedMonth} onAdd={c => { onAddCall(c); setShowAdd(false); }} onClose={() => setShowAdd(false)} />}
+        </div>
+      );
+    }
+
+    // ============================================================
+    // GATE DECISION PANEL
+    // ============================================================
+
+    function GateDecisionPanel({ monthData, decision, onDecide }) {
+      const [notes, setNotes] = useState(decision?.notes || '');
+
+      const decisionColors = {
+        green: { bg: '#ECFDF5', color: '#059669', border: '#6EE7B7' },
+        yellow: { bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' },
+        red: { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA' },
+        blue: { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' },
+        gray: { bg: '#F9FAFB', color: '#6B7280', border: '#E5E7EB' },
+        go: { bg: '#ECFDF5', color: '#059669', border: '#6EE7B7' },
+        nogo: { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA' },
+        path_a: { bg: '#ECFDF5', color: '#059669', border: '#6EE7B7' },
+        path_bc: { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' },
+        archive: { bg: '#F9FAFB', color: '#6B7280', border: '#E5E7EB' },
+      };
+
+      return (
+        <div className="border-2 border-dashed border-gray-300 rounded-xl p-5 bg-white">
+          <div className="text-sm font-bold text-gray-800 mb-1">{monthData.gateDecisionLabel}</div>
+          <div className="text-xs text-gray-400 mb-4">MD issues this decision after reviewing all gate requirements and team presentation.</div>
+          <div className="space-y-2 mb-3">
+            {monthData.gateDecisionOptions.map(opt => {
+              const dc = decisionColors[opt.value] || decisionColors[opt.color] || decisionColors.gray;
+              const selected = decision?.decision === opt.value;
+              return (
+                <button key={opt.value} onClick={() => onDecide(opt.value, notes)}
+                  style={{
+                    background: selected ? dc.bg : 'white',
+                    border: `2px solid ${selected ? dc.border : '#E5E7EB'}`,
+                    color: selected ? dc.color : '#374151',
+                  }}
+                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all hover:border-gray-300">
+                  {selected && '* '}{opt.label}
+                </button>
+              );
+            })}
+          </div>
+          {decision?.decision && (
+            <>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                onBlur={() => onDecide(decision.decision, notes)}
+                rows={2} placeholder="MD decision notes..."
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              {decision.date && <div className="text-xs text-gray-400 mt-1">Decided: {decision.date}</div>}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    // ============================================================
+    // TEAM DETAIL
+    // ============================================================
+
+    function TeamDetail({ team, onUpdate }) {
+      const [selMonth, setSelMonth] = useState(team.currentMonth);
+      const [tab, setTab] = useState('gates');
+
+      const monthData = MONTHS.find(m => m.id === selMonth);
+      const phase = currentPhase(team);
+      const totalCalls = team.calls.length;
+      const { done: currDone, total: currTotal } = getGateCompletion(team, team.currentMonth);
+
+      const toggleGate = (monthId, gateId) => {
+        const cur = team.gates[monthId]?.[gateId] || {};
+        const completed = !cur.completed;
+        onUpdate({ ...team, gates: { ...team.gates, [monthId]: { ...team.gates[monthId], [gateId]: { completed, date: completed ? new Date().toISOString().split('T')[0] : null } } } });
+      };
+
+      const updateAssignment = (monthId, assignId, data) => {
+        onUpdate({ ...team, assignments: { ...team.assignments, [monthId]: { ...team.assignments[monthId], [assignId]: data } } });
+      };
+
+      const addCall = (call) => onUpdate({ ...team, calls: [...team.calls, call] });
+      const deleteCall = (callId) => onUpdate({ ...team, calls: team.calls.filter(c => c.id !== callId) });
+
+      const updateDecision = (monthId, decision, notes) => {
+        onUpdate({ ...team, gateDecisions: { ...team.gateDecisions, [monthId]: { decision, notes, date: new Date().toISOString().split('T')[0] } } });
+      };
+
+      const updateNotes = (monthId, notes) => {
+        onUpdate({ ...team, monthNotes: { ...team.monthNotes, [monthId]: notes } });
+      };
+
+      const advanceMonth = () => {
+        if (team.currentMonth < 6) {
+          const next = team.currentMonth + 1;
+          onUpdate({ ...team, currentMonth: next });
+          setSelMonth(next);
+          setTab('gates');
+        }
+      };
+
+      const allDone = currDone === currTotal && currTotal > 0;
+
+      return (
+        <div className="min-h-screen" style={{ background: '#EDF4FB' }}>
+          {/* Team header bar */}
+          <div className="bg-white shadow-sm">
+            <div className="max-w-7xl mx-auto px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-3 mb-1">
+                    <h1 className="text-xl font-bold text-gray-900">{team.name}</h1>
+                    {team.venture && <span className="text-gray-500">- {team.venture}</span>}
+                    <PhasePill phase={phase} />
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-gray-500">
+                    {team.founder && <span>Founder: <b className="text-gray-700 font-medium">{team.founder}</b></span>}
+                    {team.faculty && <span>Faculty: <b className="text-gray-700 font-medium">{team.faculty}</b></span>}
+                    {team.coach && <span>Coach: <b className="text-gray-700 font-medium">{team.coach}</b></span>}
+                    {team.dso && <span>DSO: <b className="text-gray-700 font-medium">{team.dso}</b></span>}
+                    {team.domain && <span>Domain: <b className="text-gray-700 font-medium">{team.domain}</b></span>}
+                    {team.cohort && <span>Cohort: <b className="text-gray-700 font-medium">{team.cohort}</b></span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-center">
+                    <div style={{ color: '#059669' }} className="text-2xl font-bold">{totalCalls}</div>
+                    <div className="text-xs text-gray-400">total calls</div>
+                  </div>
+                  <div className="text-center">
+                    <div style={{ color: '#4B9CD3' }} className="text-2xl font-bold">{currDone}/{currTotal}</div>
+                    <div className="text-xs text-gray-400">M{team.currentMonth} gates</div>
+                  </div>
+                  {allDone && team.currentMonth < 6 && (
+                    <button onClick={advanceMonth} style={{ background: '#13294B' }}
+                      className="text-white text-sm px-4 py-2 rounded-lg font-semibold hover:opacity-90">
+                      Advance to M{team.currentMonth + 1} ->
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Month timeline */}
+          <div className="bg-white border-b border-gray-100 overflow-x-auto">
+            <div className="max-w-7xl mx-auto px-4">
+              <div className="flex gap-1.5 py-3" style={{ minWidth: 'max-content' }}>
+                {MONTHS.map(m => {
+                  const isCompleted = m.id < team.currentMonth;
+                  const isCurrent = m.id === team.currentMonth;
+                  const isSelected = m.id === selMonth;
+                  const isFuture = m.id > team.currentMonth;
+                  const { done, total } = getGateCompletion(team, m.id);
+                  const allGatesDone = done === total && total > 0;
+
+                  return (
+                    <button key={m.id}
+                      onClick={() => { setSelMonth(m.id); setTab('gates'); }}
+                      style={{
+                        background: isSelected ? pc(m.phase) : isCompleted && allGatesDone ? '#ECFDF5' : isCurrent ? pb(m.phase) : '#F9FAFB',
+                        color: isSelected ? 'white' : isCompleted && allGatesDone ? '#059669' : isCurrent ? pc(m.phase) : '#9CA3AF',
+                        border: isSelected ? `2px solid ${pc(m.phase)}` : isCompleted && allGatesDone ? '2px solid #6EE7B7' : isCurrent ? `2px solid ${pbl(m.phase)}` : '2px solid #E5E7EB',
+                        opacity: isFuture ? 0.5 : 1,
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all">
+                      {isCompleted && allGatesDone && !isSelected ? 'v ' : ''}{m.label}: {m.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            {monthData && (
+              <>
+                {/* Month header */}
+                <div className="bg-white rounded-xl p-5 mb-5 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span style={{ background: pc(monthData.phase), color: 'white' }}
+                          className="text-xs font-bold px-2 py-0.5 rounded">{monthData.label}</span>
+                        <h2 className="text-lg font-bold text-gray-900">{monthData.name}</h2>
+                        <PhasePill phase={monthData.phase} />
+                      </div>
+                      <p className="text-sm text-gray-600 max-w-2xl leading-relaxed">{monthData.objective}</p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {monthData.keyActivities.map((a, i) => (
+                          <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{a}</span>
+                        ))}
+                      </div>
+                    </div>
+                    {monthData.callTarget && (
+                      <div className="text-center bg-emerald-50 border border-emerald-100 rounded-xl px-5 py-3">
+                        <div style={{ color: totalCalls >= monthData.callTarget ? '#059669' : '#374151' }}
+                          className="text-3xl font-bold">{totalCalls}</div>
+                        <div className="text-xs text-gray-500">{monthData.callTarget}+ calls needed</div>
+                        <div className={`text-xs font-semibold mt-0.5 ${totalCalls >= monthData.callTarget ? 'text-emerald-600' : 'text-orange-500'}`}>
+                          {totalCalls >= monthData.callTarget ? 'v Target met!' : `${monthData.callTarget - totalCalls} more needed`}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tabs + content */}
+                <div className="flex gap-2 mb-5 overflow-x-auto">
+                  {[
+                    { id: 'gates', label: `Gates (${getGateCompletion(team, selMonth).done}/${getGateCompletion(team, selMonth).total})` },
+                    { id: 'assignments', label: 'Assignments' },
+                    { id: 'calls', label: `Calls (${totalCalls})` },
+                    { id: 'notes', label: 'Notes' },
+                  ].map(t => (
+                    <button key={t.id} onClick={() => setTab(t.id)}
+                      style={{
+                        background: tab === t.id ? '#13294B' : 'white',
+                        color: tab === t.id ? 'white' : '#6B7280',
+                        border: tab === t.id ? '1px solid #13294B' : '1px solid #E5E7EB',
+                      }}
+                      className="px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors">
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                  {/* Main panel */}
+                  <div className="lg:col-span-2 bg-white rounded-xl p-5 shadow-sm">
+                    {tab === 'gates' && (
+                      <GateChecklist
+                        gates={monthData.gates}
+                        gateData={team.gates[selMonth] || {}}
+                        onToggle={gId => toggleGate(selMonth, gId)}
+                      />
+                    )}
+                    {tab === 'assignments' && (
+                      <AssignmentTracker
+                        assignments={monthData.assignments}
+                        assignmentData={team.assignments[selMonth] || {}}
+                        onUpdate={(aId, data) => updateAssignment(selMonth, aId, data)}
+                      />
+                    )}
+                    {tab === 'calls' && (
+                      <CallLog
+                        team={team}
+                        onAddCall={addCall}
+                        onDeleteCall={deleteCall}
+                        selectedMonth={selMonth}
+                      />
+                    )}
+                    {tab === 'notes' && (
+                      <div>
+                        <div className="font-semibold text-gray-800 mb-2">Coach / Program Notes - {monthData.label}</div>
+                        <textarea value={team.monthNotes?.[selMonth] || ''} onChange={e => updateNotes(selMonth, e.target.value)}
+                          rows={10} placeholder="Coach observations, session notes, blockers, hypothesis drift, sales avoidance flags, items for MD attention..."
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sidebar */}
+                  <div className="space-y-4">
+                    {monthData.gateDecision && (
+                      <GateDecisionPanel
+                        monthData={monthData}
+                        decision={team.gateDecisions?.[selMonth]}
+                        onDecide={(d, n) => updateDecision(selMonth, d, n)}
+                      />
+                    )}
+
+                    {/* Call milestone progress */}
+                    <div className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="font-semibold text-gray-800 text-sm mb-3">Call Milestones</div>
+                      {[{ m: 1, t: 15 }, { m: 2, t: 30 }, { m: 4, t: 50 }, { m: 5, t: 70 }].map(({ m, t }) => (
+                        <div key={m} className="mb-2.5">
+                          <div className="flex justify-between text-xs text-gray-500 mb-1">
+                            <span>Month {m} ({t}+ calls)</span>
+                            <span className={totalCalls >= t ? 'text-emerald-600 font-semibold' : ''}>
+                              {totalCalls >= t ? 'v ' : ''}{totalCalls}/{t}
+                            </span>
+                          </div>
+                          <ProgressBar value={totalCalls} max={t} color={totalCalls >= t ? '#059669' : '#4B9CD3'} h={4} />
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Month-by-month gate progress */}
+                    <div className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="font-semibold text-gray-800 text-sm mb-3">Gate Progress by Month</div>
+                      {MONTHS.map(m => {
+                        const { done, total } = getGateCompletion(team, m.id);
+                        const active = m.id <= team.currentMonth;
+                        return (
+                          <div key={m.id} className="mb-2" style={{ opacity: active ? 1 : 0.35 }}>
+                            <div className="flex justify-between text-xs text-gray-500 mb-0.5">
+                              <span>{m.label}</span>
+                              <span>{done}/{total}</span>
+                            </div>
+                            <ProgressBar value={done} max={total} color={pc(m.phase)} h={3} />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Contract Ladder reference */}
+                    {selMonth >= 5 && (
+                      <div className="bg-white rounded-xl p-4 shadow-sm">
+                        <div className="font-semibold text-gray-800 text-sm mb-3">Contract Ladder</div>
+                        {[
+                          { tier: 'T4', label: 'Pilot Agreement', desc: 'Binding contract - counts alone', color: '#059669', bg: '#ECFDF5' },
+                          { tier: 'T3', label: 'Design Partner', desc: 'Time/data commitment - counts with LOI', color: '#2563EB', bg: '#EFF6FF' },
+                          { tier: 'T2', label: 'Letter of Intent', desc: 'Non-binding signal - counts', color: '#D97706', bg: '#FFFBEB' },
+                          { tier: 'T1', label: 'Waitlist / Interest', desc: 'Does not count for gate', color: '#9CA3AF', bg: '#F9FAFB' },
+                        ].map(item => (
+                          <div key={item.tier} style={{ background: item.bg, border: `1px solid ${item.color}30` }}
+                            className="rounded-lg p-2.5 mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <span style={{ background: item.color, color: 'white' }} className="text-xs font-bold px-1.5 py-0.5 rounded">{item.tier}</span>
+                              <div>
+                                <div style={{ color: item.color }} className="text-xs font-semibold">{item.label}</div>
+                                <div className="text-xs text-gray-500">{item.desc}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // APP
+    // ============================================================
+
+    function App() {
+      const [teams, setTeams] = useState(() => {
+        try { const s = localStorage.getItem('kairos_v1_teams'); return s ? JSON.parse(s) : []; }
+        catch { return []; }
+      });
+      const [selectedId, setSelectedId] = useState(null);
+      const [view, setView] = useState('dashboard');
+
+      useEffect(() => {
+        localStorage.setItem('kairos_v1_teams', JSON.stringify(teams));
+      }, [teams]);
+
+      const selectedTeam = teams.find(t => t.id === selectedId);
+
+      const addTeam = (team) => setTeams(ts => [...ts, team]);
+      const updateTeam = (updated) => setTeams(ts => ts.map(t => t.id === updated.id ? updated : t));
+
+      const openTeam = (id) => { setSelectedId(id); setView('team'); };
+      const goBack = () => { setView('dashboard'); setSelectedId(null); };
+
+      return (
+        <div>
+          {/* Header */}
+          <div style={{ background: '#13294B' }} className="shadow-md sticky top-0 z-40">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {view !== 'dashboard' && (
+                  <button onClick={goBack} className="text-white/60 hover:text-white text-sm mr-1 flex items-center gap-1">
+                    <span>Back to Dashboard</span>
+                  </button>
+                )}
+                <div className="flex items-center gap-2.5">
+                  <div style={{ background: '#4B9CD3' }} className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-base">K</div>
+                  <div>
+                    <div className="text-white font-bold text-base leading-tight">Kairos</div>
+                    <div className="text-white/40 text-xs leading-tight">Program Tracker</div>
+                  </div>
+                </div>
+                {selectedTeam && (
+                  <div className="ml-2 flex items-center gap-2">
+                    <span className="text-white/30">></span>
+                    <span className="text-white font-medium">{selectedTeam.name}</span>
+                    {selectedTeam.venture && <span className="text-white/50 text-sm hidden sm:inline">- {selectedTeam.venture}</span>}
+                  </div>
+                )}
+              </div>
+              <div className="text-white/30 text-xs hidden sm:block">UNC Kairos . NCCU</div>
+            </div>
+          </div>
+
+          {view === 'dashboard' && <Dashboard teams={teams} onAddTeam={addTeam} onSelectTeam={openTeam} />}
+          {view === 'team' && selectedTeam && <TeamDetail team={selectedTeam} onUpdate={updateTeam} />}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
