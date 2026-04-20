@@ -390,7 +390,7 @@
 
             <button style={{ background: '#13294B', color: 'white' }}
               className="w-full mt-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-              Open Team ->
+              Open Team →
             </button>
           </div>
         </div>
@@ -780,7 +780,7 @@
                         </div>
                         {call.problem && <div className="text-xs text-gray-600 mb-0.5">{call.problem}</div>}
                         {call.keyQuote && <div className="text-xs text-gray-400 italic">"{call.keyQuote}"</div>}
-                        {call.outcome && <div className="text-xs text-blue-500 mt-0.5">-> {call.outcome}</div>}
+                        {call.outcome && <div className="text-xs text-blue-500 mt-0.5">→ {call.outcome}</div>}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                         <span className="text-xs text-gray-400">{call.date}</span>
@@ -929,7 +929,7 @@
                   {allDone && team.currentMonth < 6 && (
                     <button onClick={advanceMonth} style={{ background: '#13294B' }}
                       className="text-white text-sm px-4 py-2 rounded-lg font-semibold hover:opacity-90">
-                      Advance to M{team.currentMonth + 1} ->
+                      Advance to M{team.currentMonth + 1} →
                     </button>
                   )}
                 </div>
@@ -1235,7 +1235,7 @@
                 </div>
                 {selectedTeam && (
                   <div className="ml-2 flex items-center gap-2">
-                    <span className="text-white/30">></span>
+                    <span className="text-white/30">›</span>
                     <span className="text-white font-medium">{selectedTeam.name}</span>
                     {selectedTeam.venture && <span className="text-white/50 text-sm hidden sm:inline">- {selectedTeam.venture}</span>}
                   </div>
